@@ -33,7 +33,13 @@ export interface CapabilityTest {
   latencyMs?: number;
 }
 
-export type ErrorCategory = 'timeout' | 'rate_limit' | 'api_error' | 'network' | 'unknown';
+/**
+ * Why a request failed. `empty_response` means the provider answered 200 but
+ * returned no visible content — almost always a reasoning model that burned its
+ * whole output budget thinking and never emitted an answer. It is a distinct
+ * class of failure from an API error, and it is not a wrong answer.
+ */
+export type ErrorCategory = 'timeout' | 'rate_limit' | 'api_error' | 'network' | 'empty_response' | 'unknown';
 
 export interface IterationResult {
   iteration: number;
@@ -392,4 +398,255 @@ export interface IdentityRun {
   createdAt: string;
   completedAt?: string;
   error?: string;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Model quality evaluation                                                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * L1 deterministic graders. Every one of them is pure local computation: no
+ * network call, no external judge. A question that can be graded by a rule MUST
+ * NOT be sent to a judge model — the judge is both an expense and a bias source.
+ */
+export type GraderType =
+  | 'exact'
+  | 'contains'
+  | 'regex'
+  | 'numeric_tolerance'
+  | 'json_schema'
+  | 'multiple_choice'
+  | 'set_match';
+
+/** Config fields a grader understands. All optional; each grader reads its own. */
+export interface GraderConfig {
+  /**
+   * Whole-string equality / containment / regex: any of these also counts as
+   * correct, in addition to `expected`.
+   */
+  accepted?: string[];
+  /** `contains` and `regex` operate on these; falls back to `[expected]`. */
+  patterns?: string[];
+  /** `contains` / `regex`: `all` (default) requires every pattern, `any` requires one. */
+  mode?: 'all' | 'any';
+  /** `numeric_tolerance`: allowed absolute deviation. Default 0 (exact numeric match). */
+  tolerance?: number;
+  /** `numeric_tolerance`: which number to read out of the output. Default `first`. */
+  pick?: 'first' | 'last';
+  /** `json_schema`: a minimal JSON-schema subset (see services/graders/structured.ts). */
+  schema?: Record<string, unknown>;
+  /** `multiple_choice`: the option letters in play. Default ['A','B','C','D']. */
+  choices?: string[];
+  /** `set_match`: item delimiter. Default `,` and newline. */
+  delimiter?: string;
+  /** `set_match`: `exact` (default) requires equal sets, `subset` requires no extras. */
+  setMode?: 'exact' | 'subset' | 'superset';
+  /* ---- text comparison strictness, shared by exact / contains / regex ---- */
+  /** Default false — comparison is case-insensitive. */
+  caseSensitive?: boolean;
+  /** Default true — collapse runs of whitespace and trim. */
+  trimWhitespace?: boolean;
+  /** Default false — drop punctuation before comparing. */
+  stripPunctuation?: boolean;
+}
+
+/** One question in a dataset. */
+export interface QualitySample {
+  id: string;
+  input: string;
+  systemPrompt?: string;
+  images?: ImageInput[];
+  /** Reference answer. Required by every L1 grader except `json_schema`. */
+  expected?: string;
+  grader: GraderType;
+  graderConfig?: GraderConfig;
+  /** Free-form bucket used for the per-category breakdown. */
+  category?: string;
+  meta?: Record<string, unknown>;
+}
+
+export interface QualityDataset {
+  id: string;
+  name: string;
+  description: string;
+  source: 'builtin' | 'import' | 'manual';
+  samples: QualitySample[];
+  /** Denormalized so the list endpoint never has to parse `samples`. */
+  sampleCount: number;
+  tags: string[];
+  /** Provenance / licence note. Shown verbatim in the UI. */
+  note?: string;
+  /** Built-in datasets are seeded on boot and cannot be edited or deleted. */
+  builtin: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** List payload — samples stripped, count kept. */
+export type QualityDatasetSummary = Omit<QualityDataset, 'samples'>;
+
+/**
+ * `pass` / `fail` are verdicts about the model. `error` means we could not
+ * reach a verdict at all — it must never be folded into `fail`.
+ */
+export type GraderStatus = 'pass' | 'fail' | 'error';
+
+export interface GradeResult {
+  status: GraderStatus;
+  /** 1 for pass, 0 for fail, null when no verdict was reached. */
+  score: number | null;
+  /** i18n key under `quality.grade.`, resolved by the frontend with `params`. */
+  detailKey: string;
+  /** Evidence interpolated into the localized detail template. */
+  params?: Record<string, string | number>;
+  /** Raw English rendering of the same information. Used by exports and logs. */
+  detail: string;
+}
+
+/** Static description of a grader, served to the UI to render its config form. */
+export interface GraderDescriptor {
+  type: GraderType;
+  /** i18n key under `quality.grader.`, resolved by the frontend. */
+  labelKey: string;
+  /** Whether the sample must carry `expected`. */
+  requiresExpected: boolean;
+  configFields: Array<
+    | 'accepted'
+    | 'patterns'
+    | 'mode'
+    | 'tolerance'
+    | 'pick'
+    | 'schema'
+    | 'choices'
+    | 'delimiter'
+    | 'setMode'
+    | 'caseSensitive'
+    | 'trimWhitespace'
+    | 'stripPunctuation'
+  >;
+}
+
+export interface QualitySampleResult {
+  sampleId: string;
+  index: number;
+  category: string;
+  grader: GraderType;
+  status: GraderStatus;
+  score: number | null;
+  /** i18n key under `quality.grade.`, resolved by the frontend. */
+  detailKey: string;
+  params?: Record<string, string | number>;
+  /** Raw English rendering — survives translation changes and CSV export. */
+  detail: string;
+  input: string;
+  expected?: string;
+  output: string;
+  inputTokens: number;
+  outputTokens: number;
+  /**
+   * Reasoning tokens the provider reported. Kept separate from `outputTokens`
+   * diagnostics because a reasoning model can spend its entire budget here and
+   * return an empty answer — the report needs to be able to say so.
+   */
+  reasoningTokens: number;
+  responseTime: number;
+  estimatedCost: number;
+  /** Set only when status is `error`. */
+  error?: string;
+  errorCategory?: ErrorCategory;
+  /** True when the provider returned no usage block and tokens were inferred. */
+  usageEstimated?: boolean;
+}
+
+export interface QualityCategoryBreakdown {
+  category: string;
+  sampleCount: number;
+  passCount: number;
+  failCount: number;
+  errorCount: number;
+  /** null when no sample in this category produced a verdict. */
+  passRate: number | null;
+}
+
+export interface QualityTargetSummary {
+  target: string;
+  targetLabel: string;
+  model: string;
+  sampleCount: number;
+  passCount: number;
+  failCount: number;
+  errorCount: number;
+  /**
+   * passCount / (sampleCount - errorCount). Null when every sample errored —
+   * reporting 0% there would claim the model answered every question wrong.
+   */
+  passRate: number | null;
+  /** Mean of the per-sample scores that actually exist. Null if none do. */
+  avgScore: number | null;
+  byCategory: QualityCategoryBreakdown[];
+  avgResponseTime: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCost: number;
+  errorBreakdown: Record<ErrorCategory, number>;
+  /** Fraction of samples whose token counts were inferred rather than reported. */
+  usageEstimatedRatio: number;
+  samples: QualitySampleResult[];
+}
+
+export interface QualityRunParams {
+  /** Pinned for reproducibility. Default 0. */
+  temperature: number;
+  topP?: number;
+  seed?: number;
+  maxTokens: number;
+  concurrency: number;
+  /**
+   * Repeat each sample this many times to expose instability. Frozen at 1 for
+   * the objective-grading milestone; the field exists so runs stay comparable
+   * once repeats land.
+   */
+  repeats: number;
+}
+
+export interface QualityRunProgress {
+  completed: number;
+  total: number;
+  currentTarget?: string;
+}
+
+export type QualityRunStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted';
+
+export interface QualityRun {
+  id: string;
+  name: string;
+  description?: string;
+  status: QualityRunStatus;
+  datasetId: string;
+  datasetName: string;
+  /**
+   * Frozen copy of the samples as they were at run time. Editing the dataset
+   * afterwards must not silently rewrite a historical report.
+   */
+  datasetSnapshot: QualitySample[];
+  /** `configId:modelName` list. */
+  targets: string[];
+  targetLabels: Record<string, string>;
+  params: QualityRunParams;
+  results: Record<string, QualityTargetSummary>;
+  progress: QualityRunProgress;
+  createdAt: string;
+  startedAt?: string;
+  completedAt?: string;
+  error?: string;
+}
+
+/**
+ * History-list payload: per-target summaries without the per-sample rows, and
+ * without the frozen dataset. A 500-question run would otherwise ship megabytes
+ * of drill-down data the list view never renders.
+ */
+export interface QualityRunListItem extends Omit<QualityRun, 'results' | 'datasetSnapshot'> {
+  sampleCount: number;
+  results: Record<string, Omit<QualityTargetSummary, 'samples'>>;
 }

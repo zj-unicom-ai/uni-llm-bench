@@ -7,6 +7,7 @@ import {
   AppstoreOutlined,
   DatabaseOutlined,
   SafetyCertificateOutlined,
+  ExperimentOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import type { ReactNode } from 'react';
@@ -22,7 +23,8 @@ export type PageType =
   | 'playground'
   | 'modules'
   | 'modelLibrary'
-  | 'identity';
+  | 'identity'
+  | 'quality';
 
 export const SIDEBAR_WIDTH = 248;
 
@@ -54,6 +56,7 @@ export function NavList({ activePage, onNavigate, runningLabel }: NavListProps) 
         { key: 'modules', icon: <AppstoreOutlined />, label: t('nav.modules') },
         { key: 'modelLibrary', icon: <DatabaseOutlined />, label: t('nav.modelLibrary') },
         { key: 'identity', icon: <SafetyCertificateOutlined />, label: t('nav.identity') },
+        { key: 'quality', icon: <ExperimentOutlined />, label: t('nav.quality') },
       ],
     },
     {

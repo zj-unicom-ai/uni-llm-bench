@@ -7,6 +7,7 @@ import {
   ProviderConfigUpdateSchema,
   TestConnectionSchema,
   CreateWorkflowSchema,
+  PlaygroundRunSchema,
 } from '../validation/schemas';
 
 describe('Validation Schemas', () => {

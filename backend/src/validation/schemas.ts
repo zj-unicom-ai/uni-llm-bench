@@ -182,5 +182,95 @@ export const IdentityVerifySchema = z.object({
   baselineId: z.string().min(1).optional(),
 });
 
+// ---------------------------------------------------------------------------
+// Quality evaluation
+// ---------------------------------------------------------------------------
+
+const GraderTypeSchema = z.enum([
+  'exact',
+  'contains',
+  'regex',
+  'numeric_tolerance',
+  'json_schema',
+  'multiple_choice',
+  'set_match',
+]);
+
+const GraderConfigSchema = z.object({
+  accepted: z.array(z.string()).optional(),
+  patterns: z.array(z.string()).optional(),
+  mode: z.enum(['all', 'any']).optional(),
+  tolerance: z.number().min(0).optional(),
+  pick: z.enum(['first', 'last']).optional(),
+  schema: z.record(z.string(), z.unknown()).optional(),
+  choices: z.array(z.string()).optional(),
+  delimiter: z.string().max(40).optional(),
+  setMode: z.enum(['exact', 'subset', 'superset']).optional(),
+  caseSensitive: z.boolean().optional(),
+  trimWhitespace: z.boolean().optional(),
+  stripPunctuation: z.boolean().optional(),
+});
+
+const ImageInputSchema = z.object({
+  type: z.enum(['url', 'base64']),
+  url: z.string().optional(),
+  mediaType: z.string().optional(),
+  data: z.string().optional(),
+});
+
+const QualitySampleSchema = z.object({
+  id: z.string().max(120).optional(),
+  input: z.string().min(1, 'Sample input is required').max(20000),
+  systemPrompt: z.string().max(20000).optional(),
+  expected: z.string().max(20000).optional(),
+  grader: GraderTypeSchema,
+  graderConfig: GraderConfigSchema.optional(),
+  category: z.string().max(120).optional(),
+  images: z.array(ImageInputSchema).optional(),
+  meta: z.record(z.string(), z.unknown()).optional(),
+});
+
+export const CreateQualityDatasetSchema = z.object({
+  name: z.string().min(1, 'Dataset name is required').max(120, 'Dataset name is too long'),
+  description: z.string().max(500, 'Description is too long').optional(),
+  tags: z.array(z.string().max(40)).max(20).optional(),
+  note: z.string().max(4000).optional(),
+  samples: z.array(QualitySampleSchema).min(1, 'At least one sample is required').max(2000),
+});
+
+export const UpdateQualityDatasetSchema = CreateQualityDatasetSchema.partial();
+
+export const ImportQualityDatasetSchema = z.object({
+  name: z.string().min(1, 'Dataset name is required').max(120),
+  description: z.string().max(500).optional(),
+  tags: z.array(z.string().max(40)).max(20).optional(),
+  text: z.string().min(1, 'Nothing to import').max(8_000_000),
+  format: z.enum(['jsonl', 'csv']).optional(),
+  /** false = dry run: return the validation report without persisting. */
+  persist: z.boolean().optional(),
+});
+
+const QualityRunParamsSchema = z.object({
+  temperature: z.number().min(0).max(2).optional(),
+  topP: z.number().min(0).max(1).optional(),
+  seed: z.number().int().optional(),
+  maxTokens: z.number().int().min(16).max(32000).optional(),
+  concurrency: z.number().int().min(1).max(16).optional(),
+});
+
+export const StartQualityRunSchema = z.object({
+  name: z.string().min(1, 'Run name is required').max(120),
+  description: z.string().max(500).optional(),
+  datasetId: z.string().min(1, 'Dataset is required'),
+  targets: z.array(z.string().min(1)).min(1, 'At least one target model is required').max(20),
+  params: QualityRunParamsSchema.optional(),
+});
+
+export const EstimateQualityRunSchema = z.object({
+  datasetId: z.string().min(1, 'Dataset is required'),
+  targets: z.array(z.string().min(1)).min(1).max(20),
+  params: QualityRunParamsSchema.optional(),
+});
+
 // Export schema type for middleware
 export type ValidationSchema = ZodSchema;

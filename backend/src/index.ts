@@ -13,10 +13,12 @@ import providerRoutes from './routes/providers';
 import playgroundRoutes from './routes/playground';
 import templateRoutes from './routes/templates';
 import identityRoutes from './routes/identity';
+import qualityRoutes from './routes/quality';
 import { authPublicRouter, authProtectedRouter } from './routes/auth';
 import { authMiddleware } from './middleware/auth';
 import { userStore } from './services/userStore';
 import { store } from './services/store';
+import { qualityRunStore } from './services/qualityRunStore';
 import { needsEncryptionMigration, markEncryptionMigrated } from './utils/secrets';
 import { decryptWithOldKey, encrypt } from './utils/encryption';
 
@@ -108,6 +110,7 @@ app.use('/api/providers', authMiddleware, providerRoutes);
 app.use('/api/playground', authMiddleware, playgroundRoutes);
 app.use('/api/templates', authMiddleware, templateRoutes);
 app.use('/api/identity', authMiddleware, identityRoutes);
+app.use('/api/quality', authMiddleware, qualityRoutes);
 
 // Unknown API paths must return JSON, not the SPA shell. Without this the
 // catch-all below answers /api/does-not-exist with index.html and the client
@@ -136,6 +139,7 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
 // A previous process may have been killed mid-run. Those runs can never finish,
 // so surface them as interrupted instead of leaving the UI spinning forever.
 store.reconcileOrphans();
+qualityRunStore.reconcileOrphans();
 
 const server = app.listen(PORT, () => {
   console.log(`🚀 Uni LLM Bench running on http://localhost:${PORT}`);
@@ -172,6 +176,13 @@ const server = app.listen(PORT, () => {
   console.log(`   DELETE /api/identity/baselines/:id - Delete baseline`);
   console.log(`   POST   /api/identity/verify        - Verify model identity`);
   console.log(`   GET    /api/identity/runs          - List verification runs`);
+  console.log(`   GET    /api/quality/graders        - Quality grader catalog`);
+  console.log(`   GET    /api/quality/datasets       - List quality datasets`);
+  console.log(`   POST   /api/quality/datasets/import - Import JSONL/CSV dataset`);
+  console.log(`   POST   /api/quality/estimate       - Estimate evaluation cost`);
+  console.log(`   POST   /api/quality/runs           - Start quality evaluation`);
+  console.log(`   GET    /api/quality/runs           - List quality runs`);
+  console.log(`   GET    /api/quality/runs/:id/stream - SSE stream`);
 });
 
 server.on('error', (err: NodeJS.ErrnoException) => {
@@ -197,6 +208,7 @@ function shutdown(signal: string): void {
   for (const id of store.runningIds()) {
     store.markInterrupted(id);
   }
+  qualityRunStore.reconcileOrphans();
 
   server.close(() => {
     console.log('[Server] HTTP server closed');

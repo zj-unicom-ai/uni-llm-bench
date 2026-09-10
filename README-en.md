@@ -25,6 +25,7 @@ Uni LLM Bench makes "trustworthy" the default out of the box, rather than a togg
 |---|-----------------------------------------------------|
 | 🔬 **Measurement trustworthiness** | Every value is real and traceable: fail loud, never leave simulated values, show N/A when unmeasurable, count retries in latency, structurally classify errors      |
 | 🕵️ **Model Identity verification** | 10 fingerprint probes in two layers (protocol layer + tokenizer layer), baseline comparison, conclusions under hard criteria                |
+| 🧭 **Quality evaluation** | 7 deterministic graders + 6 built-in datasets (66 questions); unmeasurable questions are reported as unjudgeable, not wrong, with the raw output and grading evidence kept per question |
 | 🧪 **Workflow engine** | Multi-task serial benchmark, each task with its own prompt / concurrency (1–5000) / iterations (1–10M), with warm-up     |
 | 💰 **Cost estimation** | Per-model unit price per million tokens, including cache read tiers, with estimated cost visible before running                |
 | 📚 **Template Library** | 20 built-in templates + full CRUD for custom templates, persistently stored                       |
@@ -71,6 +72,28 @@ This module **ignores the label and fingerprints the endpoint directly**.
 - **Hard criteria** — Conclusion is one of: `consistent` / `suspicious` / `mismatch` / `undetermined` / `error`; one fatal signal takes priority over any weighted score
 - **Evidence table** — Each probe lists its baseline and measured values, so you can verify the conclusion yourself
 
+### Quality evaluation
+
+Answers the third question — **is it right**. Complements the performance benchmark ("how fast and how expensive") and identity verification ("is it the model it claims to be").
+
+- **7 deterministic graders** — exact match, keyword containment, regex format, numeric tolerance, JSON Schema, multiple choice, set match. All run locally: zero cost, fully reproducible
+- **A question a rule can grade never reaches a judge model** — a judge is both an expense and a bias source, so it is reserved for subjective tasks (L2, planned)
+- **6 built-in datasets, 66 questions** — GSM8K (math reasoning, MIT) and HellaSwag (commonsense continuation, MIT) come from the upstream originals; four authored datasets cover structured extraction, instruction format, field normalisation and set enumeration
+- **Unmeasurable is never counted as wrong** — when the provider errors or a grader has nothing to compare, the question is recorded as unjudgeable and excluded from the pass-rate denominator; if nothing at all was judgeable the rate reads "not judgeable" rather than 0%
+- **Every question is reviewable** — raw model output, reference answer, matched rule and its evidence values are kept, filterable down to failures or unjudgeable samples
+- **Frozen snapshots** — questions are fixed when a run starts, so editing a dataset later cannot rewrite a historical report
+- **Measurement conditions are on the report** — temperature, max tokens, concurrency and the grader mix are disclosed up front; temperature 0 and non-streaming by default, for reproducibility
+- **JSONL / CSV import** — validated row by row before import, with a line-numbered report; an invalid row is never silently accepted
+
+| Metric | Meaning |
+| --- | --- |
+| Pass rate | pass / (pass + fail); unjudgeable questions stay out of the denominator |
+| Pass rate by category | broken down by question type, which is where weak spots show |
+| Unjudgeable count | provider errors or uncomparable questions, shown next to the pass rate rather than in a footnote |
+| Avg latency / cost | reuses the existing statistical conventions, and only over samples that actually returned a response |
+
+> **Dataset licensing**: TruthfulQA is a generative task where string matching produces false negatives, so it is deliberately excluded; CMMLU is CC BY-NC-SA 4.0, incompatible with this project's MIT licence, so it is excluded too. Full third-party notices live in `backend/src/services/qualitySeed/ATTRIBUTION.md`.
+
 ### Arena
 
 - Two Providers/Models compared side by side on the same prompt, with responses shown in parallel
@@ -114,7 +137,6 @@ The core design goal is to eliminate the fatal flaw of "measurement tools return
 | **Retries counted in** | Records retry count and `e2eTime` including backoff waits; summaries expose `retryRate` and `hasRetries`. |
 | **Structurally classified errors** | Classified first by HTTP status code / provider error code, with string matching only as fallback — so 429 is retried while 4xx is not. |
 | **Single source of pricing** | Unified pricing module (per-million unit price, cache tiers, longest-prefix match) supplies all data; no scattered magic numbers in the adapters. |
-| **Keys not in URL** | Gemini's API key moved from the `?key=` query string to the `x-goog-api-key` request header. |
 | **Bounded and recoverable** | List endpoints are paginated (default 200, max 500); on startup and graceful shutdown, leftover `running` tasks are corrected to `interrupted`. |
 
 ---
@@ -150,6 +172,12 @@ The core design goal is to eliminate the fatal flaw of "measurement tools return
   <tr>
     <td><img src="docs/screenshots/screenshot-playground.png" width="500" /></td>
     <td><img src="docs/screenshots/screenshot-detail.png" width="500" /></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Quality Evaluation — Model Health Check</b></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/screenshot-quality.png" width="500" /></td>
   </tr>
 </table>
 
@@ -234,7 +262,7 @@ All configuration lives in a single `.env` file at the project root:
 │  ┌────────────────────▼────────────────────▼───────────┐ │
 │  │                      Service layer                  │ │
 │  │  Benchmark engine · Workflow engine                 │ │
-│  │  Identity engine · Template store · Cost estimator   │ │
+│  │  Identity engine · Quality engine · Template store  │ │
 │  └────────────────────┬────────────────────────────────┘ │
 │                       │                                  │
 │  ┌────────────────────▼────────────────────────────────┐ │

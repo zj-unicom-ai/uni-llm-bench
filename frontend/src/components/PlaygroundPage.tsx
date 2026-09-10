@@ -22,7 +22,7 @@ import { useProviders } from '../hooks/useProviders';
 import { usePlayground, PlaygroundMetrics, GenerationParams } from '../hooks/usePlayground';
 import { usePlaygroundHistory } from '../hooks/usePlaygroundHistory';
 import { PlaygroundHistorySidebar } from './PlaygroundHistorySidebar';
-import { ImageInput, getProviderColor, Provider } from '../types';
+import { ImageInput, getProviderColor, ProviderConfigResponse } from '../types';
 import {
   PRESET_PROMPTS,
   QUICK_MAX_TOKENS,
@@ -59,6 +59,13 @@ function safeGet(key: string): string | null {
 function safeSet(key: string, v: string) {
   try {
     localStorage.setItem(key, v);
+  } catch {
+    /* ignore */
+  }
+}
+function safeRemove(key: string) {
+  try {
+    localStorage.removeItem(key);
   } catch {
     /* ignore */
   }
@@ -136,6 +143,7 @@ export function PlaygroundPage() {
           return prev;
         }, { replace: true });
       } else {
+        safeRemove(PROVIDER_A_KEY);
         setSearchParams((prev) => {
           prev.delete('provider');
           return prev;
@@ -154,6 +162,7 @@ export function PlaygroundPage() {
           return prev;
         }, { replace: true });
       } else {
+        safeRemove(MODEL_A_KEY);
         setSearchParams((prev) => {
           prev.delete('model');
           return prev;
@@ -165,10 +174,12 @@ export function PlaygroundPage() {
   const setBProviderId = useCallback((v: string | null) => {
     setBProviderIdRaw(v);
     if (v) safeSet(PROVIDER_B_KEY, v);
+    else safeRemove(PROVIDER_B_KEY);
   }, []);
   const setBModelName = useCallback((v: string | null) => {
     setBModelNameRaw(v);
     if (v) safeSet(MODEL_B_KEY, v);
+    else safeRemove(MODEL_B_KEY);
   }, []);
 
   // Heavy prompt handling (keep full text in a ref to avoid textarea lag)
@@ -251,6 +262,7 @@ export function PlaygroundPage() {
     maxTokens,
     images: images.length > 0 ? images : undefined,
     enableThinking: enableThinking || undefined,
+    useStreaming,
     genParams: computeGenParams(),
   });
 
@@ -1010,7 +1022,7 @@ function ParamField({
   );
 }
 
-function CombatantCard({
+export function CombatantCard({
   side,
   title,
   accent,
@@ -1023,7 +1035,7 @@ function CombatantCard({
   side: 'A' | 'B';
   title: string;
   accent: string;
-  providers: Provider[];
+  providers: ProviderConfigResponse[];
   providerId: string | null;
   modelName: string | null;
   onProvider: (v: string | null) => void;
@@ -1044,10 +1056,27 @@ function CombatantCard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [providerId, selectedProvider]);
 
+  // A persisted providerId can outlive the provider it points at (provider deleted,
+  // database re-seeded, or a bookmarked `?provider=` link). Drop such selections so
+  // the Select falls back to its placeholder instead of rendering the raw UUID.
+  useEffect(() => {
+    if (providers.length === 0 || !providerId) return;
+    if (!providers.some((p) => p.id === providerId)) {
+      onProvider(null);
+      onModel(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [providers, providerId]);
+
+  // Only forward values that still resolve to a known option — antd renders the raw
+  // value when nothing matches, which would flash the UUID before the effect above runs.
+  const safeProviderId = providerId && providers.some((p) => p.id === providerId) ? providerId : undefined;
+  const safeModelName = modelName && activeModels.some((m) => m.name === modelName) ? modelName : undefined;
+
   return (
     <div
       className="arena-card"
-      style={providerId ? { borderColor: `${accent}40`, background: `${accent}08` } : undefined}
+      style={safeProviderId ? { borderColor: `${accent}40`, background: `${accent}08` } : undefined}
     >
       <div className="flex items-center gap-3 mb-3.5">
         <div className="arena-avatar" style={{ background: `linear-gradient(135deg, ${accent}, ${accent}cc)` }}>
@@ -1064,7 +1093,7 @@ function CombatantCard({
           <Select
             className="w-full"
             placeholder={t('playground.selectProvider')}
-            value={providers.length > 0 ? providerId : undefined}
+            value={providers.length > 0 ? safeProviderId : undefined}
             onChange={(val) => {
               onProvider(val);
               onModel(null);
@@ -1085,9 +1114,9 @@ function CombatantCard({
         <div className="flex-1">
           <Select
             className="w-full"
-            placeholder={providerId ? t('playground.selectModel') : t('playground.selectProviderFirst')}
-            disabled={!providerId}
-            value={activeModels.length > 0 ? modelName : undefined}
+            placeholder={safeProviderId ? t('playground.selectModel') : t('playground.selectProviderFirst')}
+            disabled={!safeProviderId}
+            value={activeModels.length > 0 ? safeModelName : undefined}
             onChange={onModel}
             options={activeModels.map((m) => ({
               value: m.name,
@@ -1140,7 +1169,7 @@ function ResponsePanel({
     metrics: PlaygroundMetrics | null;
     error: string | null;
   };
-  provider?: Provider;
+  provider?: ProviderConfigResponse;
   modelName?: string | null;
   loading: boolean;
   onCopy: (onCopied: () => void) => void;

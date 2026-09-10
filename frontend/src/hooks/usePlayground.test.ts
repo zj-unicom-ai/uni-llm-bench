@@ -29,6 +29,18 @@ function sseResp(chunks: string[]): Response {
   return new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream' } });
 }
 
+/** A fetch that only settles when its AbortSignal fires, mirroring a cancelled request. */
+function abortableFetch() {
+  return (_url: string, opts: { signal: AbortSignal }) =>
+    new Promise((_resolve, reject) => {
+      opts.signal.addEventListener('abort', () => {
+        const err = new Error('aborted');
+        err.name = 'AbortError';
+        reject(err);
+      });
+    });
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
@@ -40,8 +52,8 @@ const baseParams = {
   maxTokens: 100,
 };
 
-describe('usePlayground.runPrompt (non-streaming)', () => {
-  it('200 success → populates text + metrics', async () => {
+describe('usePlayground.runPanel (non-streaming)', () => {
+  it('200 success → populates panel A text + metrics', async () => {
     apiFetchSpy.mockResolvedValueOnce(
       jsonResp({
         success: true,
@@ -56,41 +68,52 @@ describe('usePlayground.runPrompt (non-streaming)', () => {
       }),
     );
     const { result } = renderHook(() => usePlayground());
+
     await act(async () => {
-      await result.current.runPrompt(baseParams);
+      await result.current.runPanel('A', baseParams);
     });
-    expect(result.current.responseText).toBe('hello');
-    expect(result.current.metrics?.outputTokens).toBe(10);
-    expect(result.current.error).toBeNull();
+
+    expect(apiFetchSpy).toHaveBeenCalledWith('/api/playground/run', expect.objectContaining({ method: 'POST' }));
+    expect(result.current.panels.A.responseText).toBe('hello');
+    expect(result.current.panels.A.metrics?.outputTokens).toBe(10);
+    expect(result.current.panels.A.metrics?.firstTokenLatency).toBe(50);
+    expect(result.current.panels.A.error).toBeNull();
   });
 
-  it('non-2xx → sets error', async () => {
+  it('non-2xx → sets error and leaves text empty', async () => {
     apiFetchSpy.mockResolvedValueOnce(jsonResp({ success: false, error: 'rate limit' }, 429));
     const { result } = renderHook(() => usePlayground());
+
     await act(async () => {
-      await result.current.runPrompt(baseParams);
+      await result.current.runPanel('A', baseParams);
     });
-    expect(result.current.error).toBe('rate limit');
-    expect(result.current.responseText).toBe('');
+
+    expect(result.current.panels.A.error).toBe('rate limit');
+    expect(result.current.panels.A.responseText).toBe('');
+    expect(result.current.panels.A.metrics).toBeNull();
   });
 
   it('200 with success=false sets error and skips state population', async () => {
     apiFetchSpy.mockResolvedValueOnce(jsonResp({ success: false, error: 'bad' }, 200));
     const { result } = renderHook(() => usePlayground());
+
     await act(async () => {
-      await result.current.runPrompt(baseParams);
+      await result.current.runPanel('A', baseParams);
     });
-    expect(result.current.error).toBe('bad');
-    expect(result.current.metrics).toBeNull();
+
+    expect(result.current.panels.A.error).toBe('bad');
+    expect(result.current.panels.A.metrics).toBeNull();
   });
 
-  it('thrown error → setError unless AbortError', async () => {
+  it('thrown error → sets error message', async () => {
     apiFetchSpy.mockRejectedValueOnce(new Error('network'));
     const { result } = renderHook(() => usePlayground());
+
     await act(async () => {
-      await result.current.runPrompt(baseParams);
+      await result.current.runPanel('A', baseParams);
     });
-    expect(result.current.error).toContain('network');
+
+    expect(result.current.panels.A.error).toContain('network');
   });
 
   it('AbortError is silently ignored', async () => {
@@ -98,41 +121,44 @@ describe('usePlayground.runPrompt (non-streaming)', () => {
     abortErr.name = 'AbortError';
     apiFetchSpy.mockRejectedValueOnce(abortErr);
     const { result } = renderHook(() => usePlayground());
+
     await act(async () => {
-      await result.current.runPrompt(baseParams);
+      await result.current.runPanel('A', baseParams);
     });
-    expect(result.current.error).toBeNull();
+
+    expect(result.current.panels.A.error).toBeNull();
   });
 
-  it('captures cache fields when present', async () => {
+  it('captures cache fields only when present', async () => {
     apiFetchSpy.mockResolvedValueOnce(
-      jsonResp({
-        success: true,
-        text: 'x',
-        cacheCreationTokens: 100,
-        cacheReadTokens: 200,
-      }),
+      jsonResp({ success: true, text: 'x', cacheCreationTokens: 100, cacheReadTokens: 200 }),
     );
     const { result } = renderHook(() => usePlayground());
+
     await act(async () => {
-      await result.current.runPrompt(baseParams);
+      await result.current.runPanel('A', baseParams);
     });
-    expect(result.current.metrics?.cacheCreationTokens).toBe(100);
-    expect(result.current.metrics?.cacheReadTokens).toBe(200);
+
+    expect(result.current.panels.A.metrics?.cacheCreationTokens).toBe(100);
+    expect(result.current.panels.A.metrics?.cacheReadTokens).toBe(200);
   });
 
-  it('toggles loading false after the call', async () => {
+  it('clears loading and streaming once the call settles', async () => {
     apiFetchSpy.mockResolvedValueOnce(jsonResp({ success: true, text: 'x' }));
     const { result } = renderHook(() => usePlayground());
+
     await act(async () => {
-      await result.current.runPrompt(baseParams);
+      await result.current.runPanel('A', baseParams);
     });
-    expect(result.current.loading).toBe(false);
+
+    expect(result.current.panels.A.loading).toBe(false);
+    expect(result.current.panels.A.streaming).toBe(false);
+    expect(result.current.anyLoading).toBe(false);
   });
 });
 
-describe('usePlayground.streamPrompt (SSE)', () => {
-  it('aggregates chunk events into responseText', async () => {
+describe('usePlayground.streamPanel (SSE)', () => {
+  it('hits the streaming endpoint and aggregates chunk events', async () => {
     apiFetchSpy.mockResolvedValueOnce(
       sseResp([
         'data: {"type":"chunk","text":"hello"}\n\n',
@@ -141,14 +167,32 @@ describe('usePlayground.streamPrompt (SSE)', () => {
       ]),
     );
     const { result } = renderHook(() => usePlayground());
+
     await act(async () => {
-      await result.current.streamPrompt(baseParams);
+      await result.current.streamPanel('A', baseParams);
     });
-    expect(result.current.responseText).toBe('hello world');
-    expect(result.current.metrics?.outputTokens).toBe(2);
+
+    expect(apiFetchSpy).toHaveBeenCalledWith('/api/playground/stream', expect.objectContaining({ method: 'POST' }));
+    expect(result.current.panels.A.responseText).toBe('hello world');
+    expect(result.current.panels.A.metrics?.outputTokens).toBe(2);
   });
 
-  it('captures reasoning events separately from chunks', async () => {
+  // Regression: chunks used to be appended from a stale `panels` closure, so only
+  // the last chunk survived whenever the stream ended without a `done` event.
+  it('concatenates every chunk instead of keeping only the last one', async () => {
+    apiFetchSpy.mockResolvedValueOnce(
+      sseResp(['data: {"type":"chunk","text":"aa"}\n\n', 'data: {"type":"chunk","text":"a"}\n\n']),
+    );
+    const { result } = renderHook(() => usePlayground());
+
+    await act(async () => {
+      await result.current.streamPanel('A', baseParams);
+    });
+
+    expect(result.current.panels.A.responseText).toBe('aaa');
+  });
+
+  it('captures reasoning events separately from content chunks', async () => {
     apiFetchSpy.mockResolvedValueOnce(
       sseResp([
         'data: {"type":"reasoning","text":"thinking..."}\n\n',
@@ -157,68 +201,99 @@ describe('usePlayground.streamPrompt (SSE)', () => {
       ]),
     );
     const { result } = renderHook(() => usePlayground());
+
     await act(async () => {
-      await result.current.streamPrompt(baseParams);
+      await result.current.streamPanel('A', baseParams);
     });
-    expect(result.current.responseText).toBe('answer');
-    expect(result.current.reasoningText).toBe('thinking...');
-    expect(result.current.metrics?.reasoningTokens).toBe(5);
+
+    expect(result.current.panels.A.responseText).toBe('answer');
+    expect(result.current.panels.A.reasoningText).toBe('thinking...');
+    expect(result.current.panels.A.metrics?.reasoningTokens).toBe(5);
   });
 
-  it('handles error event in stream', async () => {
+  it('stores firstTokenLatency and cache fields from the done event', async () => {
+    apiFetchSpy.mockResolvedValueOnce(
+      sseResp([
+        'data: {"type":"chunk","text":"hi"}\n\n',
+        'data: {"type":"done","text":"hi","firstTokenLatency":321,"outputTokens":4,"model":"gpt-4","cacheReadTokens":7}\n\n',
+      ]),
+    );
+    const { result } = renderHook(() => usePlayground());
+
+    await act(async () => {
+      await result.current.streamPanel('A', baseParams);
+    });
+
+    expect(result.current.panels.A.metrics?.firstTokenLatency).toBe(321);
+    expect(result.current.panels.A.metrics?.cacheReadTokens).toBe(7);
+  });
+
+  it('keeps partial text when the stream reports an error', async () => {
     apiFetchSpy.mockResolvedValueOnce(
       sseResp(['data: {"type":"chunk","text":"hi"}\n\n', 'data: {"type":"error","message":"upstream 500"}\n\n']),
     );
     const { result } = renderHook(() => usePlayground());
+
     await act(async () => {
-      await result.current.streamPrompt(baseParams);
+      await result.current.streamPanel('A', baseParams);
     });
-    expect(result.current.error).toBe('upstream 500');
-    // Partial text from chunks before the error is preserved
-    expect(result.current.responseText).toBe('hi');
+
+    expect(result.current.panels.A.error).toBe('upstream 500');
+    expect(result.current.panels.A.responseText).toBe('hi');
   });
 
   it('JSON error response (validation failure) → sets error and exits', async () => {
     apiFetchSpy.mockResolvedValueOnce(jsonResp({ error: 'missing providerId' }, 400));
     const { result } = renderHook(() => usePlayground());
+
     await act(async () => {
-      await result.current.streamPrompt(baseParams);
+      await result.current.streamPanel('A', baseParams);
     });
-    expect(result.current.error).toBe('missing providerId');
+
+    expect(result.current.panels.A.error).toBe('missing providerId');
+    expect(result.current.panels.A.loading).toBe(false);
   });
 
-  it('non-2xx without JSON body sets generic HTTP error', async () => {
+  it('non-2xx without a JSON body sets a generic HTTP error', async () => {
     apiFetchSpy.mockResolvedValueOnce(new Response('', { status: 500, headers: { 'Content-Type': 'text/plain' } }));
     const { result } = renderHook(() => usePlayground());
+
     await act(async () => {
-      await result.current.streamPrompt(baseParams);
+      await result.current.streamPanel('A', baseParams);
     });
-    expect(result.current.error).toContain('500');
+
+    expect(result.current.panels.A.error).toContain('500');
   });
 
-  it('ignores malformed SSE JSON chunks', async () => {
+  it('ignores malformed SSE lines and the [DONE] sentinel', async () => {
     apiFetchSpy.mockResolvedValueOnce(
       sseResp([
         'data: not-json\n\n',
+        ': keep-alive comment\n\n',
         'data: {"type":"chunk","text":"recovered"}\n\n',
-        'data: {"type":"done","text":"recovered"}\n\n',
+        'data: [DONE]\n\n',
       ]),
     );
     const { result } = renderHook(() => usePlayground());
+
     await act(async () => {
-      await result.current.streamPrompt(baseParams);
+      await result.current.streamPanel('A', baseParams);
     });
-    expect(result.current.responseText).toBe('recovered');
+
+    expect(result.current.panels.A.responseText).toBe('recovered');
+    expect(result.current.panels.A.error).toBeNull();
   });
 
-  it('toggles streaming + loading correctly across the call', async () => {
+  it('clears streaming + loading across the call', async () => {
     apiFetchSpy.mockResolvedValueOnce(sseResp(['data: {"type":"done","text":""}\n\n']));
     const { result } = renderHook(() => usePlayground());
+
     await act(async () => {
-      await result.current.streamPrompt(baseParams);
+      await result.current.streamPanel('A', baseParams);
     });
-    expect(result.current.loading).toBe(false);
-    expect(result.current.streaming).toBe(false);
+
+    expect(result.current.panels.A.loading).toBe(false);
+    expect(result.current.panels.A.streaming).toBe(false);
   });
 
   it('AbortError is silently ignored mid-stream', async () => {
@@ -226,47 +301,191 @@ describe('usePlayground.streamPrompt (SSE)', () => {
     err.name = 'AbortError';
     apiFetchSpy.mockRejectedValueOnce(err);
     const { result } = renderHook(() => usePlayground());
+
     await act(async () => {
-      await result.current.streamPrompt(baseParams);
+      await result.current.streamPanel('A', baseParams);
     });
-    expect(result.current.error).toBeNull();
+
+    expect(result.current.panels.A.error).toBeNull();
   });
 });
 
-describe('usePlayground.abort', () => {
-  it('clears loading + streaming state', async () => {
+describe('usePlayground.runAll (used by A/B compare)', () => {
+  it('routes both panels to the streaming endpoint when useStreaming is on', async () => {
+    // Each panel needs its own Response — a body stream can only be read once.
+    apiFetchSpy.mockImplementation(() =>
+      sseResp(['data: {"type":"done","text":"ok","outputTokens":1,"model":"m"}\n\n']),
+    );
     const { result } = renderHook(() => usePlayground());
-    act(() => result.current.abort());
-    expect(result.current.loading).toBe(false);
-    expect(result.current.streaming).toBe(false);
+
+    await act(async () => {
+      await result.current.runAll([
+        { id: 'A', params: { ...baseParams, useStreaming: true } },
+        { id: 'B', params: { ...baseParams, modelName: 'gpt-4o', useStreaming: true } },
+      ]);
+    });
+
+    expect(apiFetchSpy).toHaveBeenCalledTimes(2);
+    for (const call of apiFetchSpy.mock.calls) {
+      expect(call[0]).toBe('/api/playground/stream');
+    }
+    expect(result.current.panels.A.responseText).toBe('ok');
+    expect(result.current.panels.B.responseText).toBe('ok');
+  });
+
+  it('routes both panels to the non-streaming endpoint when useStreaming is off', async () => {
+    apiFetchSpy.mockImplementation(() => jsonResp({ success: true, text: 'ok', outputTokens: 1, model: 'm' }));
+    const { result } = renderHook(() => usePlayground());
+
+    await act(async () => {
+      await result.current.runAll([
+        { id: 'A', params: { ...baseParams, useStreaming: false } },
+        { id: 'B', params: { ...baseParams, modelName: 'gpt-4o', useStreaming: false } },
+      ]);
+    });
+
+    expect(apiFetchSpy).toHaveBeenCalledTimes(2);
+    for (const call of apiFetchSpy.mock.calls) {
+      expect(call[0]).toBe('/api/playground/run');
+    }
+    expect(result.current.panels.A.responseText).toBe('ok');
+    expect(result.current.panels.B.responseText).toBe('ok');
+  });
+
+  // Regression: parallel panels used to overwrite each other's text.
+  it('keeps A and B text separate when streaming in parallel', async () => {
+    apiFetchSpy
+      .mockResolvedValueOnce(sseResp(['data: {"type":"chunk","text":"aaa"}\n\n']))
+      .mockResolvedValueOnce(sseResp(['data: {"type":"chunk","text":"bbb"}\n\n']));
+    const { result } = renderHook(() => usePlayground());
+
+    await act(async () => {
+      await result.current.runAll([
+        { id: 'A', params: { ...baseParams, useStreaming: true } },
+        { id: 'B', params: { ...baseParams, modelName: 'gpt-4o', useStreaming: true } },
+      ]);
+    });
+
+    expect(result.current.panels.A.responseText).toBe('aaa');
+    expect(result.current.panels.B.responseText).toBe('bbb');
+  });
+
+  it('wipes previous results before a new run', async () => {
+    apiFetchSpy.mockImplementation(() => jsonResp({ success: true, text: 'fresh', outputTokens: 1, model: 'm' }));
+    const { result } = renderHook(() => usePlayground());
+
+    await act(async () => {
+      await result.current.runPanel('A', baseParams);
+    });
+    expect(result.current.panels.A.responseText).toBe('fresh');
+
+    await act(async () => {
+      await result.current.runAll([{ id: 'A', params: { ...baseParams, useStreaming: false } }]);
+    });
+
+    expect(result.current.panels.A.responseText).toBe('fresh');
+    expect(result.current.panels.B).toBeUndefined();
+  });
+});
+
+describe('usePlayground.abortPanel / abortAll', () => {
+  it('abortPanel cancels the in-flight request and settles the panel', async () => {
+    apiFetchSpy.mockImplementationOnce(abortableFetch() as never);
+    const { result } = renderHook(() => usePlayground());
+
+    let pending!: Promise<void>;
+    act(() => {
+      pending = result.current.runPanel('A', baseParams);
+    });
+    expect(result.current.panels.A.loading).toBe(true);
+
+    await act(async () => {
+      result.current.abortPanel('A');
+      await pending;
+    });
+
+    expect(result.current.panels.A.loading).toBe(false);
+    expect(result.current.panels.A.streaming).toBe(false);
+    expect(result.current.panels.A.error).toBeNull();
+  });
+
+  it('abortAll clears loading + streaming on every panel', async () => {
+    apiFetchSpy.mockImplementation(() => new Promise(() => {}));
+    const { result } = renderHook(() => usePlayground());
+
+    await act(async () => {
+      void result.current.runPanel('A', baseParams);
+      void result.current.runPanel('B', baseParams);
+    });
+    expect(result.current.anyLoading).toBe(true);
+
+    await act(async () => {
+      result.current.abortAll();
+    });
+
+    expect(result.current.anyLoading).toBe(false);
+    expect(result.current.panels.A.loading).toBe(false);
+    expect(result.current.panels.B.streaming).toBe(false);
   });
 
   it('aborting before any request is a no-op', () => {
     const { result } = renderHook(() => usePlayground());
-    expect(() => result.current.abort()).not.toThrow();
+    expect(() =>
+      act(() => {
+        result.current.abortPanel('A');
+        result.current.abortAll();
+      }),
+    ).not.toThrow();
+    expect(result.current.panels).toEqual({});
+    expect(result.current.anyLoading).toBe(false);
   });
 });
 
-describe('usePlayground.reset', () => {
-  it('clears text, metrics, error', async () => {
+describe('usePlayground.resetPanel / resetAll', () => {
+  it('resetPanel clears a single panel', async () => {
     apiFetchSpy.mockResolvedValueOnce(jsonResp({ success: true, text: 'hello', outputTokens: 5, model: 'gpt-4' }));
     const { result } = renderHook(() => usePlayground());
-    await act(async () => {
-      await result.current.runPrompt(baseParams);
-    });
-    expect(result.current.responseText).toBe('hello');
 
-    act(() => result.current.reset());
-    expect(result.current.responseText).toBe('');
-    expect(result.current.metrics).toBeNull();
-    expect(result.current.error).toBeNull();
+    await act(async () => {
+      await result.current.runPanel('A', baseParams);
+    });
+    expect(result.current.panels.A.responseText).toBe('hello');
+
+    await act(async () => {
+      result.current.resetPanel('A');
+    });
+
+    expect(result.current.panels.A.responseText).toBe('');
+    expect(result.current.panels.A.metrics).toBeNull();
+    expect(result.current.panels.A.error).toBeNull();
+  });
+
+  it('resetAll drops every panel', async () => {
+    apiFetchSpy.mockImplementation(() => jsonResp({ success: true, text: 'hello', outputTokens: 5, model: 'gpt-4' }));
+    const { result } = renderHook(() => usePlayground());
+
+    await act(async () => {
+      await result.current.runAll([
+        { id: 'A', params: { ...baseParams, useStreaming: false } },
+        { id: 'B', params: { ...baseParams, modelName: 'gpt-4o', useStreaming: false } },
+      ]);
+    });
+    expect(Object.keys(result.current.panels)).toEqual(['A', 'B']);
+
+    await act(async () => {
+      result.current.resetAll();
+    });
+
+    expect(result.current.panels).toEqual({});
+    expect(result.current.anyLoading).toBe(false);
   });
 });
 
 describe('usePlayground.restore', () => {
-  it('populates state from saved snapshot', async () => {
+  it('populates panel A from a saved snapshot', async () => {
     const { result } = renderHook(() => usePlayground());
-    act(() => {
+
+    await act(async () => {
       result.current.restore({
         responseText: 'restored text',
         reasoningText: 'restored reasoning',
@@ -282,18 +501,23 @@ describe('usePlayground.restore', () => {
         },
       });
     });
-    await waitFor(() => expect(result.current.responseText).toBe('restored text'));
-    expect(result.current.reasoningText).toBe('restored reasoning');
-    expect(result.current.metrics?.outputTokens).toBe(2);
+
+    await waitFor(() => expect(result.current.panels.A.responseText).toBe('restored text'));
+    expect(result.current.panels.A.reasoningText).toBe('restored reasoning');
+    expect(result.current.panels.A.metrics?.outputTokens).toBe(2);
+    expect(result.current.panels.A.loading).toBe(false);
   });
 
-  it('handles undefined fields with empty defaults', () => {
+  it('falls back to empty defaults for missing fields', async () => {
     const { result } = renderHook(() => usePlayground());
-    act(() => {
+
+    await act(async () => {
       result.current.restore({});
     });
-    expect(result.current.responseText).toBe('');
-    expect(result.current.reasoningText).toBe('');
-    expect(result.current.metrics).toBeNull();
+
+    expect(result.current.panels.A.responseText).toBe('');
+    expect(result.current.panels.A.reasoningText).toBe('');
+    expect(result.current.panels.A.metrics).toBeNull();
+    expect(result.current.panels.A.error).toBeNull();
   });
 });

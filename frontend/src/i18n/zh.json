@@ -60,7 +60,8 @@
       "test": "测试",
       "tools": "工具"
     },
-    "identity": "模型身份"
+    "identity": "模型身份",
+    "quality": "质量评测"
   },
   "guide": {
     "title": "使用引导",
@@ -152,6 +153,10 @@
     "identity": {
       "title": "模型身份",
       "subtitle": "核验端点是否真的在提供它声称的模型"
+    },
+    "quality": {
+      "title": "质量评测",
+      "subtitle": "让同一个模型依次跑完多个数据集，得到一份可复核的体检报告：每题都保留模型原始输出与判分依据，测不出的题记为「未能判定」而不是答错。"
     }
   },
   "login": {
@@ -907,6 +912,194 @@
       "free": "免费",
       "one-token": "约 1 token",
       "two-requests": "2 次请求"
+    }
+  },
+  "quality": {
+    "form": {
+      "title": "体检配置",
+      "model": "被测模型",
+      "modelPlaceholder": "选择要体检的模型",
+      "datasets": "评测数据集",
+      "selectAll": "全选",
+      "clearAll": "清空",
+      "selectedCount": "已选 {{count}} / {{total}} 个数据集",
+      "sampleCount": "{{count}} 题",
+      "builtin": "内置",
+      "provenance": "查看出处与许可",
+      "advanced": "高级参数",
+      "temperature": "采样温度",
+      "temperatureHint": "默认 0，保证同一道题每次都得到可比的答案。调高之后结果不再可复现，分数之间也失去可比性。",
+      "maxTokens": "最大输出令牌",
+      "maxTokensHint": "单题输出上限。设得过小会因截断直接判错。",
+      "concurrency": "并发数",
+      "concurrencyHint": "建议 2–8。过高会把延迟与限流混进质量结果。",
+      "noneSelected": "请先选择至少一个数据集",
+      "totalRequests": "共 {{count}} 道题",
+      "estimateLoading": "正在预估成本…",
+      "estimatedCost": "预估成本约 {{cost}}",
+      "estimateUnavailable": "所选模型未配置单价，无法预估成本",
+      "start": "开始体检",
+      "startCount": "开始体检（{{count}} 个数据集）",
+      "running": "体检进行中…",
+      "cancel": "中止体检",
+      "allSelectedNote": "将依次跑完 {{count}} 道题。数据集之间串行执行，避免并发压力污染质量结果。"
+    },
+    "progress": {
+      "title": "体检进行中",
+      "dataset": "数据集 {{index}} / {{total}}",
+      "overall": "整体进度",
+      "passed": "通过",
+      "failed": "失败",
+      "errors": "未能判定",
+      "keepOpen": "可以切到别的页面，进度会继续。"
+    },
+    "report": {
+      "title": "体检报告",
+      "empty": "还没有评测结果",
+      "partial": "进行中",
+      "done": "已完成",
+      "partialHint": "体检尚未跑完，下面是已完成数据集的结果。",
+      "subject": "被测对象",
+      "overallRate": "总通过率",
+      "notJudgeable": "无法判定",
+      "of": "{{pass}} / {{judged}} 道可判定题",
+      "questions": "题目总数",
+      "totalCost": "总成本",
+      "errorBanner": "有 {{count}} 道题未能判定（接口报错或判分器无法比对）。这些题已从通过率中剔除，不计为答错。",
+      "newCheck": "重新体检",
+      "conditions": {
+        "temperature": "温度 {{value}}",
+        "maxTokens": "最大输出 {{value}}",
+        "concurrency": "并发 {{value}}",
+        "graders": "{{count}} 类判分器",
+        "frozen": "题目已冻结快照，事后修改数据集不影响本报告"
+      },
+      "noResults": "这次运行没有产生任何样本结果（运行被中断或未开始执行）"
+    },
+    "scorecard": {
+      "title": "成绩单",
+      "dataset": "数据集",
+      "samples": "{{count}} 题",
+      "passRate": "通过率",
+      "breakdown": "通过 / 失败 / 未判定",
+      "latency": "平均耗时",
+      "cost": "成本",
+      "status": "状态",
+      "byCategory": "分类通过率",
+      "detail": "逐题明细"
+    },
+    "detail": {
+      "filter": {
+        "all": "全部 {{count}}",
+        "failed": "只看失败 {{count}}",
+        "error": "只看未判定 {{count}}"
+      },
+      "col": {
+        "index": "#",
+        "category": "分类",
+        "grader": "判分器",
+        "status": "判定",
+        "expected": "参考答案",
+        "output": "模型输出",
+        "reason": "判分依据"
+      },
+      "fullInput": "完整题目",
+      "fullExpected": "参考答案",
+      "fullOutput": "模型输出",
+      "emptyOutput": "（模型返回了空内容）",
+      "justification": "判分依据",
+      "providerError": "接口错误",
+      "tokens": "输入 {{input}} / 输出 {{output}} 令牌",
+      "latency": "耗时 {{value}}",
+      "cost": "成本 {{value}}",
+      "usageEstimated": "令牌数为估算值",
+      "reasoningTokens": "推理令牌 {{count}}"
+    },
+    "status": {
+      "pass": "通过",
+      "fail": "失败",
+      "error": "未能判定"
+    },
+    "run": {
+      "status": {
+        "pending": "等待中",
+        "running": "运行中",
+        "completed": "已完成",
+        "failed": "失败",
+        "cancelled": "已中止",
+        "interrupted": "已中断"
+      }
+    },
+    "history": {
+      "title": "历史体检",
+      "empty": "还没有体检记录",
+      "name": "体检名称",
+      "target": "数据集",
+      "passRate": "通过率",
+      "status": "状态",
+      "createdAt": "时间",
+      "actions": "操作",
+      "open": "打开报告",
+      "errors": "{{count}} 未判定",
+      "confirmDelete": "删除这次体检记录？",
+      "drawerTitle": "历史报告",
+      "frozenHint": "这是历史运行的冻结快照，判分结论不会随判分规则更新而改变。想要当前规则下的结论，请重新体检。"
+    },
+    "grader": {
+      "exact": "完全匹配",
+      "contains": "包含关键词",
+      "regex": "正则格式",
+      "numericTolerance": "数值容差",
+      "jsonSchema": "JSON Schema",
+      "multipleChoice": "选择题",
+      "setMatch": "集合匹配"
+    },
+    "grade": {
+      "exact": {
+        "match": "命中参考答案「{{expected}}」",
+        "mismatch": "输出「{{output}}」与参考答案「{{expected}}」不一致"
+      },
+      "contains": {
+        "hit": "命中 {{matched}} / {{total}} 个关键词",
+        "miss": "缺少关键词：{{missing}}（共 {{total}} 个）"
+      },
+      "regex": {
+        "hit": "格式规则命中 {{matched}} / {{total}} 条",
+        "miss": "有 {{missing}} / {{total}} 条格式规则未命中"
+      },
+      "numeric": {
+        "match": "结果 {{value}} 落在 {{expected}} ± {{tolerance}} 之内",
+        "mismatch": "结果 {{value}} 与参考答案 {{expected}} 相差 {{diff}}（容差 {{tolerance}}）",
+        "unparsed": "输出中没有找到数字，参考答案为 {{expected}}",
+        "expectedUnparsed": "参考答案「{{expected}}」不含数字"
+      },
+      "json": {
+        "valid": "输出符合全部约束",
+        "invalid": "输出不是合法 JSON：{{error}}",
+        "violations": "{{count}} 处不符合约束：{{violations}}"
+      },
+      "choice": {
+        "match": "选择 {{choice}}",
+        "mismatch": "选择 {{choice}}，正确答案是 {{expected}}",
+        "notFound": "输出中没有可以识别的选项字母",
+        "expectedNotOption": "参考答案「{{expected}}」不在选项 {{choices}} 之中"
+      },
+      "set": {
+        "match": "集合一致（{{expectedCount}} 项）",
+        "mismatch": "缺少 {{missing}} 项、多出 {{extra}} 项（应为 {{expectedCount}} 项）"
+      },
+      "emptyOutput": "模型返回了空内容",
+      "missingExpected": "这道题缺少参考答案，无法判分",
+      "missingPatterns": "缺少匹配模式，无法判分",
+      "invalidRegex": "正则 /{{pattern}}/ 非法：{{error}}",
+      "missingSchema": "缺少 JSON Schema，无法判分",
+      "invalidSchema": "Schema 格式有误：{{error}}",
+      "unknownGrader": "未知判分器「{{grader}}」",
+      "crashed": "判分器内部错误：{{error}}",
+      "providerFailed": "接口调用失败：{{error}}",
+      "targetUnresolved": "无法解析该模型：{{error}}",
+      "emptyResponse": "接口返回了空内容，没有任何可判分的答案",
+      "truncatedResponse": "模型用满了 {{maxTokens}} 令牌的输出上限仍未给出答案（其中推理令牌 {{reasoningTokens}}）。可调高「最大输出令牌」后重跑。"
     }
   }
 }

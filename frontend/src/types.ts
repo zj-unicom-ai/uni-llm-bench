@@ -20,7 +20,14 @@ export interface BenchmarkConfig {
   targetCacheHitRate?: number; // 0.0–1.0
 }
 
-export type ErrorCategory = 'timeout' | 'rate_limit' | 'api_error' | 'network' | 'unknown';
+export type ErrorCategory =
+  | 'timeout'
+  | 'rate_limit'
+  | 'api_error'
+  | 'network'
+  /** Provider answered 200 with no visible content — usually an exhausted output budget. */
+  | 'empty_response'
+  | 'unknown';
 
 export interface IterationResult {
   iteration: number;
@@ -333,4 +340,220 @@ export interface WorkflowTemplateRecord extends WorkflowTemplate {
   builtin: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+// ==================== Quality Evaluation Types ====================
+
+export type GraderType =
+  | 'exact'
+  | 'contains'
+  | 'regex'
+  | 'numeric_tolerance'
+  | 'json_schema'
+  | 'multiple_choice'
+  | 'set_match';
+
+export interface GraderConfig {
+  accepted?: string[];
+  patterns?: string[];
+  mode?: 'all' | 'any';
+  tolerance?: number;
+  pick?: 'first' | 'last';
+  schema?: Record<string, unknown>;
+  choices?: string[];
+  delimiter?: string;
+  setMode?: 'exact' | 'subset' | 'superset';
+  caseSensitive?: boolean;
+  trimWhitespace?: boolean;
+  stripPunctuation?: boolean;
+}
+
+export interface QualitySample {
+  id: string;
+  input: string;
+  systemPrompt?: string;
+  expected?: string;
+  grader: GraderType;
+  graderConfig?: GraderConfig;
+  category?: string;
+  meta?: Record<string, unknown>;
+}
+
+export interface QualityDatasetSummary {
+  id: string;
+  name: string;
+  description: string;
+  source: 'builtin' | 'import' | 'manual';
+  sampleCount: number;
+  tags: string[];
+  /** Provenance / licence notice for bundled benchmarks. */
+  note?: string;
+  builtin: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface QualityDataset extends QualityDatasetSummary {
+  samples: QualitySample[];
+}
+
+export type GraderStatus = 'pass' | 'fail' | 'error';
+
+export interface GraderDescriptor {
+  type: GraderType;
+  /** i18n key under `quality.grader.`. */
+  labelKey: string;
+  requiresExpected: boolean;
+  configFields: string[];
+}
+
+export interface QualitySampleResult {
+  sampleId: string;
+  index: number;
+  category: string;
+  grader: GraderType;
+  status: GraderStatus;
+  /** 1 / 0, or null when no verdict was reached. */
+  score: number | null;
+  /** i18n key under `quality.grade.`. */
+  detailKey: string;
+  params?: Record<string, string | number>;
+  /** Raw English justification, used as the translation fallback. */
+  detail: string;
+  input: string;
+  expected?: string;
+  output: string;
+  inputTokens: number;
+  outputTokens: number;
+  /** Reasoning tokens the provider reported, kept apart from the visible answer. */
+  reasoningTokens: number;
+  responseTime: number;
+  estimatedCost: number;
+  error?: string;
+  errorCategory?: ErrorCategory;
+  usageEstimated?: boolean;
+}
+
+export interface QualityCategoryBreakdown {
+  category: string;
+  sampleCount: number;
+  passCount: number;
+  failCount: number;
+  errorCount: number;
+  passRate: number | null;
+}
+
+export interface QualityTargetSummary {
+  target: string;
+  targetLabel: string;
+  model: string;
+  sampleCount: number;
+  passCount: number;
+  failCount: number;
+  errorCount: number;
+  /** null when every sample errored — never rendered as 0%. */
+  passRate: number | null;
+  avgScore: number | null;
+  byCategory: QualityCategoryBreakdown[];
+  avgResponseTime: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCost: number;
+  errorBreakdown: Record<ErrorCategory, number>;
+  usageEstimatedRatio: number;
+  samples: QualitySampleResult[];
+}
+
+export interface QualityRunParams {
+  temperature: number;
+  topP?: number;
+  seed?: number;
+  maxTokens: number;
+  concurrency: number;
+  repeats: number;
+}
+
+export interface QualityRunProgress {
+  completed: number;
+  total: number;
+  currentTarget?: string;
+}
+
+export type QualityRunStatus = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled' | 'interrupted';
+
+export interface QualityRun {
+  id: string;
+  name: string;
+  description?: string;
+  status: QualityRunStatus;
+  datasetId: string;
+  datasetName: string;
+  datasetSnapshot: QualitySample[];
+  targets: string[];
+  targetLabels: Record<string, string>;
+  params: QualityRunParams;
+  results: Record<string, QualityTargetSummary>;
+  progress: QualityRunProgress;
+  createdAt: string;
+  startedAt?: string;
+  completedAt?: string;
+  error?: string;
+}
+
+export interface QualityRunListItem extends Omit<QualityRun, 'results' | 'datasetSnapshot'> {
+  sampleCount: number;
+  results: Record<string, Omit<QualityTargetSummary, 'samples'>>;
+}
+
+export interface QualityEstimateTarget {
+  target: string;
+  targetLabel: string;
+  resolvable: boolean;
+  inputTokensPerSample: number;
+  typicalCost: number | null;
+  upperBoundCost: number | null;
+  pricingKnown: boolean;
+}
+
+export interface QualityEstimate {
+  datasetId: string;
+  datasetName: string;
+  sampleCount: number;
+  targetCount: number;
+  totalRequests: number;
+  perTarget: QualityEstimateTarget[];
+  totalTypicalCost: number | null;
+  totalUpperBoundCost: number | null;
+  assumptions: string[];
+}
+
+export interface QualityImportIssue {
+  row: number;
+  level: 'error' | 'warning';
+  message: string;
+}
+
+export interface QualityImportPreview {
+  format: 'jsonl' | 'csv';
+  totalRows: number;
+  accepted: number;
+  rejected: number;
+  issues: QualityImportIssue[];
+}
+
+/** Live counters accumulated from the SSE stream during a health check. */
+export interface QualityLiveTally {
+  pass: number;
+  fail: number;
+  error: number;
+}
+
+/** What the page knows about the dataset currently being evaluated. */
+export interface QualityActiveStep {
+  index: number;
+  total: number;
+  datasetId: string;
+  datasetName: string;
+  completed: number;
+  samples: number;
 }

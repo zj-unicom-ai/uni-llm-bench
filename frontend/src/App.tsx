@@ -42,6 +42,7 @@ import { ModelLibraryPage } from './components/ModelLibraryPage';
 import { PlaygroundPage } from './components/PlaygroundPage';
 import { ModuleLibraryPage } from './components/ModuleLibraryPage';
 import { IdentityPage } from './components/IdentityPage';
+import { QualityPage } from './components/QualityPage';
 import { LoginPage } from './components/LoginPage';
 import { useWorkflow } from './hooks/useWorkflow';
 import { isAuthenticated, clearToken } from './services/api';
@@ -57,6 +58,7 @@ const PAGE_ROUTES: Record<string, string> = {
   modules: '/modules',
   modelLibrary: '/modellibrary',
   identity: '/identity',
+  quality: '/quality',
 };
 
 /** Bump the suffix when the tour content changes so users see it again. */
@@ -215,6 +217,7 @@ function App() {
     modules: { title: t('page.modules.title'), subtitle: t('page.modules.subtitle') },
     modelLibrary: { title: t('page.modelLibrary.title'), subtitle: t('page.modelLibrary.subtitle') },
     identity: { title: t('page.identity.title'), subtitle: t('page.identity.subtitle') },
+    quality: { title: t('page.quality.title'), subtitle: t('page.quality.subtitle') },
   };
 
   // Listen for auth expiry events from apiFetch
@@ -263,6 +266,7 @@ function App() {
     if (p.startsWith('/modellibrary')) return 'modelLibrary';
     if (p.startsWith('/modules')) return 'modules';
     if (p.startsWith('/identity')) return 'identity';
+    if (p.startsWith('/quality')) return 'quality';
     return 'workflow';
   })();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -690,6 +694,21 @@ function App() {
                         transition={{ duration: 0.12 }}
                       >
                         <IdentityPage onStartTour={() => setTourRun(true)} />
+                      </motion.div>
+                    }
+                  />
+
+                  <Route
+                    path="/quality"
+                    element={
+                      <motion.div
+                        key="quality"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.12 }}
+                      >
+                        <QualityPage />
                       </motion.div>
                     }
                   />

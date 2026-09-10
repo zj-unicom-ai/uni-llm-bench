@@ -67,3 +67,4 @@ demo-*.js
 *.pem
 *.key
 scripts/test-cached-tokens.mjs
+.workbuddy/

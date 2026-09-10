@@ -35,6 +35,7 @@ export interface PlaygroundParams {
   maxTokens: number;
   images?: ImageInput[];
   enableThinking?: boolean;
+  useStreaming?: boolean;
   genParams?: GenerationParams;
 }
 
@@ -102,6 +103,13 @@ export function usePlayground() {
   const abortPanel = useCallback((id: string) => {
     abortRefs.current[id]?.abort();
     abortRefs.current[id] = null;
+    // Mirror abortAll: an aborted non-streaming run never reaches its success path,
+    // so without this the panel would be stuck showing a spinner forever.
+    setPanels((prev) => {
+      const base = prev[id];
+      if (!base) return prev;
+      return { ...prev, [id]: { ...base, loading: false, streaming: false } };
+    });
   }, []);
 
   const abortAll = useCallback(() => {
@@ -212,25 +220,38 @@ export function usePlayground() {
               const event = JSON.parse(raw);
 
               if (event.type === 'chunk') {
-                setPanel(id, { responseText: (panels[id]?.responseText || '') + event.text });
+                setPanels((prev) => {
+                  const base = prev[id] || emptyPanel();
+                  return { ...prev, [id]: { ...base, responseText: base.responseText + event.text } };
+                });
               } else if (event.type === 'reasoning') {
-                setPanel(id, { reasoningText: (panels[id]?.reasoningText || '') + event.text });
+                setPanels((prev) => {
+                  const base = prev[id] || emptyPanel();
+                  return { ...prev, [id]: { ...base, reasoningText: base.reasoningText + event.text } };
+                });
               } else if (event.type === 'done') {
-                setPanel(id, {
-                  responseText: event.text || panels[id]?.responseText || '',
-                  reasoningText: event.reasoningText || panels[id]?.reasoningText || '',
-                  metrics: {
-                    inputTokens: event.inputTokens || 0,
-                    outputTokens: event.outputTokens || 0,
-                    reasoningTokens: event.reasoningTokens || 0,
-                    totalTokens: event.totalTokens || 0,
-                    responseTime: event.responseTime || 0,
-                    firstTokenLatency: event.firstTokenLatency || 0,
-                    tokensPerSecond: event.tokensPerSecond || 0,
-                    model: event.model || '',
-                    ...(event.cacheCreationTokens && { cacheCreationTokens: event.cacheCreationTokens }),
-                    ...(event.cacheReadTokens && { cacheReadTokens: event.cacheReadTokens }),
-                  },
+                setPanels((prev) => {
+                  const base = prev[id] || emptyPanel();
+                  return {
+                    ...prev,
+                    [id]: {
+                      ...base,
+                      responseText: event.text || base.responseText,
+                      reasoningText: event.reasoningText || base.reasoningText,
+                      metrics: {
+                        inputTokens: event.inputTokens || 0,
+                        outputTokens: event.outputTokens || 0,
+                        reasoningTokens: event.reasoningTokens || 0,
+                        totalTokens: event.totalTokens || 0,
+                        responseTime: event.responseTime || 0,
+                        firstTokenLatency: event.firstTokenLatency || 0,
+                        tokensPerSecond: event.tokensPerSecond || 0,
+                        model: event.model || '',
+                        ...(event.cacheCreationTokens && { cacheCreationTokens: event.cacheCreationTokens }),
+                        ...(event.cacheReadTokens && { cacheReadTokens: event.cacheReadTokens }),
+                      },
+                    },
+                  };
                 });
               } else if (event.type === 'error') {
                 setPanel(id, { error: event.message || 'Stream error' });
@@ -249,7 +270,7 @@ export function usePlayground() {
         abortRefs.current[id] = null;
       }
     },
-    [resetPanel, setPanel, panels],
+    [resetPanel, setPanel],
   );
 
   /** Run multiple panels in parallel (used by A/B compare mode). */

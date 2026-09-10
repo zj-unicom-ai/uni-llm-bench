@@ -16,7 +16,8 @@
   - [3.6 工作流引擎](#36-工作流引擎)
   - [3.7 模板库](#37-模板库)
   - [3.8 模型身份核验](#38-模型身份核验)
-  - [3.9 持久化层](#39-持久化层)
+  - [3.9 质量评测](#39-质量评测)
+  - [3.10 持久化层](#310-持久化层)
 - [4. 前端](#4-前端)
   - [4.1 技术栈](#41-技术栈)
   - [4.2 路由与页面](#42-路由与页面)
@@ -254,7 +255,40 @@ error`；扣分规则为每个 `fail` 扣 40、每个 `warn` 扣 15，分词 tok
 
 需要参照物的探针（`requiresBaseline`）在没有基线时报告 `skipped`，而不是猜一个结果。
 
-### 3.9 持久化层
+### 3.9 质量评测
+
+`services/qualityEngine.ts` + `services/graders/` + `services/qualityImport.ts`。回答第三个问题——**答得对不对**，与前两根支柱互补：基准/工作流回答「跑得多快多贵」，身份核验回答「是不是它自称的模型」。
+
+**分三层判分，能用规则判的题绝不调用裁判模型**：
+
+| 层 | 判分器 | 适用 | 单样本成本 | 可复现性 |
+| --- | --- | --- | --- | --- |
+| **L1 确定性** | `exact`、`contains`、`regex`、`numeric_tolerance`、`json_schema`、`multiple_choice`、`set_match` | 数学、信息抽取、结构化输出、选择题、格式遵循 | 0（纯本地） | 完全 |
+| L2 LLM-as-Judge | 计划中 | 写作、翻译、摘要、开放问答 | 1 次裁判调用 | 近似 |
+| L3 人工 | 计划中 | 校准集、争议样本抽查 | 人时 | 低 |
+
+当前实现只交付 L1。判分器注册表在 `services/graders/index.ts`：新增判分器 = 加一个文件 + 注册一行，引擎不认识任何具体判分器。每个判分器满足统一契约
+`(output, expected, config) => { status, score, detailKey, params, detail }`，并且**永不抛出**——判不出结果时返回 `status: 'error'`，由上层单独统计。`detailKey` 由前端用 i18n 渲染，`detail` 是同一信息的英文原文，导出文件里用的是它，因此翻译不会改变产物内容。
+
+**三条硬约束**（均由契约测试锁死）：
+
+1. **provider 抛错记为 `error`，绝不记 0 分**。接口 401 时报告显示 N 条 `error`、通过率为 `null`（界面显示「无法判定」），而不是一个「看起来合理」的 0%。
+2. **`passRate = pass / (pass + fail)`**，分母剔除 `error`；没有任何可判定样本时返回 `null` 而不是 0。
+3. **`quality_runs.dataset_snapshot` 在创建时冻结样本**，事后修改数据集不会改写历史报告。
+4. **provider 返回 200 但内容为空 → `error`，不是答错**（`errorCategory: 'empty_response'`）。推理模型常把输出预算全花在思考上、
+   答案还没生成就被截断；把这种情况记成「答错」等于把配置问题算到模型头上。当输出令牌数触及 `maxTokens` 时，
+   判分依据会直接点名「输出预算耗尽」并提示调高该上限。默认 `maxTokens` 因此设为 4096 而非 1024——上限不计费，用不满即不花钱。
+
+**测量条件显式固定**：默认 `temperature = 0` 且**非流式**（质量评测不测延迟，流式只增加失败面），同一轮评测内所有被测模型共用同一组参数。这些字段由
+`DynamicProvider.execute()` 的第 7 个参数 `GenerationParams` 承载，**无需改造 Provider 适配层**。
+
+**编排形态**：一个数据集 × 一个模型 = 一次 run；“体检报告”由前端串行发起 N 次 run 聚合而成。串行而非并行是刻意的——同时打六个数据集会把限流与排队混进质量结果，而那与模型质量无关。
+
+**数据集**：内置 6 个数据集共 66 题。其中 GSM8K（20 题，MIT）与 HellaSwag（16 题，MIT）是上游原始题目的确定性抽样子集（`scripts/generate-quality-seed.py` 可重新生成），出处与完整许可声明见 `services/qualitySeed/ATTRIBUTION.md`；其余 4 个（结构化抽取、指令格式遵循、字段规范化、集合枚举，共 30 题）为本项目自建。TruthfulQA 因是生成式任务、字符串判分会产生误判而**刻意不收**；CMMLU 因 CC BY-NC-SA 4.0 与本项目 MIT 许可不兼容而**刻意不收**。用户可用 JSONL / CSV 导入自定义数据集，导入前返回行号级校验报告（`services/qualityImport.ts`），不合法的行不会被静默接受。
+
+`qualitySeed.test.ts` 对全部 66 道题做自洽性检查：静态预检必须无问题、垃圾答案必须判为 `fail` 而非 `error`、参考答案必须判为 `pass`、每道自建正则题都有可命中的样例。手写判分规则最容易出的错是「正则写错导致所有模型恒错」——这种缺陷在真实运行里只会表现为「模型很差」，离线检查才能发现。
+
+### 3.10 持久化层
 
 `services/database.ts` 打开唯一 SQLite 连接（WAL 模式，5 秒 busy timeout），文件位于
 `backend/data/benchmarks.db`。没有 ORM——每个 store 自己负责 `CREATE TABLE` 与 SQL。
@@ -292,6 +326,7 @@ error`；扣分规则为每个 `fail` 扣 40、每个 `warn` 扣 15，分词 tok
 | `/modules` | 模板库 | 可复用任务模板的增删改查 |
 | `/modellibrary` | 模型库 | Provider 增删改、连接测试、按模型定价 |
 | `/identity` | 模型身份 | 采集基线并核验端点 |
+| `/quality` | 质量评测 | 单模型 × 多数据集的体检报告；逐题下钻与导出 |
 | `/playground` | 竞技场 | 单提示词、流式、视觉输入、生成参数、历史侧栏 |
 
 `App.tsx` 从 pathname 推导当前页面，用于顶栏标题与引导；`/history/:id` 由一个小包装组件承载，因为
@@ -362,7 +397,7 @@ error`；扣分规则为每个 `fail` 扣 40、每个 `warn` 扣 15，分词 tok
 
 ## 5. 数据模型
 
-共 8 张表，均由各自的 store 按需创建。
+共 10 张表，均由各自的 store 按需创建。
 
 ### `users`
 
@@ -464,6 +499,36 @@ error`；扣分规则为每个 `fail` 扣 40、每个 `warn` 扣 15，分词 tok
 | `gen_params` | TEXT (JSON) | 生成参数（新增列） |
 | `error` | TEXT | |
 | `created_at` | TEXT | ISO 时间戳 |
+### `quality_datasets`
+
+| 列 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | TEXT PK | 内置为 `builtin:<slug>`，用户创建为 `ds_xxxxxxxx` |
+| `name` / `description` | TEXT | |
+| `source` | TEXT | builtin / import / manual |
+| `samples` | TEXT (JSON) | `QualitySample[]`（题目、参考答案、判分器与其配置） |
+| `sample_count` | INTEGER | 冗余计数，列表接口无需解析 JSON |
+| `tags` | TEXT (JSON) | |
+| `note` | TEXT | 出处与许可说明，界面与导出中原文展示 |
+| `builtin` | INTEGER | 1 = 内置，用户不可改不可删 |
+| `created_at` / `updated_at` | TEXT | ISO 时间戳 |
+
+### `quality_runs`
+
+| 列 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | TEXT PK | `qr_xxxxxxxx` |
+| `name` / `description` | TEXT | |
+| `status` | TEXT | pending / running / completed / failed / cancelled / interrupted |
+| `dataset_id` / `dataset_name` | TEXT | 名字冗余，数据集被删后历史仍可读 |
+| `dataset_snapshot` | TEXT (JSON) | **创建时冻结的样本**，之后再不被更新 |
+| `targets` | TEXT (JSON) | `configId:modelName` 数组 |
+| `target_labels` | TEXT (JSON) | key → 显示名 |
+| `params` | TEXT (JSON) | temperature / maxTokens / concurrency / repeats |
+| `results` | TEXT (JSON) | 每个 target 的 `QualityTargetSummary`，含逐题明细 |
+| `progress` | TEXT (JSON) | `{ completed, total, currentTarget }` |
+| `created_at` / `started_at` / `completed_at` / `error` | TEXT | |
+
 ---
 
 ## 6. API 参考
@@ -552,6 +617,27 @@ error`；扣分规则为每个 `fail` 扣 40、每个 `warn` 扣 15，分词 tok
 | GET | `/identity/runs/:id` | 单条核验 |
 | DELETE | `/identity/runs/:id` | 删除核验 |
 
+### 质量评测
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/quality/graders` | 判分器目录（是否需要参考答案、可配字段） |
+| GET | `/quality/datasets` | 数据集列表（不含样本，只带题数） |
+| GET | `/quality/datasets/:id` | 数据集详情（含样本） |
+| POST | `/quality/datasets` | 新建（手工） |
+| PUT | `/quality/datasets/:id` | 更新（内置数据集拒绝，403） |
+| DELETE | `/quality/datasets/:id` | 删除（内置数据集拒绝，403） |
+| POST | `/quality/datasets/import` | 导入 JSONL / CSV，返回逐行校验报告；`persist: false` 为仅校验 |
+| POST | `/quality/estimate` | 跑前成本预估（含假设说明） |
+| POST | `/quality/runs` | 创建并启动评测，任意 target 无法解析时直接 400 而不消耗令牌 |
+| GET | `/quality/runs` | 历史列表（分页，默认 100 上限 500） |
+| GET | `/quality/runs/:id` | 单次运行详情 |
+| GET | `/quality/runs/:id/stream` | SSE 实时进度 |
+| POST | `/quality/runs/:id/cancel` | 中止 |
+| GET | `/quality/runs/:id/export` | 导出 JSON / CSV |
+| DELETE | `/quality/runs/:id` | 删除（运行中拒绝，400） |
+
+
 ---
 
 ## 7. 实时（SSE）契约
@@ -563,6 +649,7 @@ error`；扣分规则为每个 `fail` 扣 40、每个 `warn` 扣 15，分词 tok
 | `GET /api/benchmarks/:id/stream` | `progress`、`error`、`complete`、`done` |
 | `GET /api/workflows/:id/stream` | `workflow:init`、`task:start`、`task:progress`、`task:complete`、`task:error`、`cooldown`、`workflow:complete` |
 | `POST /api/playground/stream` | `chunk`、`reasoning`、`error`、`done`，以字面量 `[DONE]` 帧收尾 |
+| `GET /api/quality/runs/:id/stream` | `quality:init`、`quality:progress`、`quality:target`、`quality:complete`、`quality:error` |
 
 工作流流在建立连接时会补发一次携带当前快照的 `workflow:init`；若运行已结束则立即发
 `workflow:complete`——这正是刷新页面后能重连的原因。
@@ -619,12 +706,15 @@ error`；扣分规则为每个 `fail` 扣 40、每个 `warn` 扣 15，分词 tok
 
 - **后端** — 认证中间件与路由（含一次性 token）、加密与密钥管理、provider 适配器行为与缓存、校验 schema、
   store 同步、工作流引擎（单元 / 执行 / 集成）。
-- **前端** — 各 hook（`useWorkflow`、`useProviders`、`usePlayground`、`useAuth`）、页面（`IdentityPage`）、
-  工具函数（`costEstimate`、`tokenCount`、`demo`），以及一个 **i18n 一致性测试**：`en.json` 与 `zh.json`
-  一旦不同步即失败。
+- **前端** — 各 hook（`useWorkflow`、`useProviders`、`usePlayground`、`useAuth`）、页面（`IdentityPage`、`QualityReport`、
+  `QualitySampleTable`、`QualityRunForm`）、工具函数（`costEstimate`、`tokenCount`、`demo`），以及一个 **i18n 一致性测试**：
+  `en.json` 与 `zh.json` 一旦不同步即失败。
+- **质量评测** — 判分器逐个边界用例（46）、导入解析（17）、引擎契约（16）、路由（23）、内置数据集自洽性（14）。
+  前端另有 15 例覆盖报告渲染的同一契约：`passRate` 为 `null` 时必须显示「无法判定」，绝不显示 0%。
 
 契约测试固定住 §3.5 的测量可信度保证，例如：当 provider 抛错时 `executeWithRetry` 必须 reject——这样后续
-的改动不可能悄悄把模拟结果加回来。
+的改动不可能悄悄把模拟结果加回来。§3.9 的质量评测沿用同一思路：provider 抛错时该样本必须记为 `error`
+且通过率为 `null`，`error` 不得被折算成 0 分。
 
 ---
 

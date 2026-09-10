@@ -367,6 +367,9 @@ export function buildErrorBreakdown(iterations: IterationResult[]): Record<Error
     rate_limit: 0,
     api_error: 0,
     network: 0,
+    // Only the quality engine produces this one; benchmarks keep the bucket at
+    // zero so both modules report the same category set.
+    empty_response: 0,
     unknown: 0,
   };
   iterations

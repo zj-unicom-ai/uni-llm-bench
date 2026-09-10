@@ -60,7 +60,8 @@
       "test": "Benchmark",
       "tools": "Tools"
     },
-    "identity": "Model Identity"
+    "identity": "Model Identity",
+    "quality": "Quality"
   },
   "guide": {
     "title": "Guided tour",
@@ -152,6 +153,10 @@
     "identity": {
       "title": "Model identity",
       "subtitle": "Verify an endpoint really serves the model it claims"
+    },
+    "quality": {
+      "title": "Quality",
+      "subtitle": "Run one model across several datasets and get a reviewable health report: every question keeps the raw response and the grading evidence, and anything that could not be judged is reported as unjudgeable rather than wrong."
     }
   },
   "login": {
@@ -907,6 +912,194 @@
       "free": "Free",
       "one-token": "≈1 token",
       "two-requests": "2 requests"
+    }
+  },
+  "quality": {
+    "form": {
+      "title": "Health check setup",
+      "model": "Model under test",
+      "modelPlaceholder": "Select a model to evaluate",
+      "datasets": "Evaluation datasets",
+      "selectAll": "Select all",
+      "clearAll": "Clear",
+      "selectedCount": "{{count}} of {{total}} datasets selected",
+      "sampleCount": "{{count}} questions",
+      "builtin": "Built-in",
+      "provenance": "View source and licence",
+      "advanced": "Advanced parameters",
+      "temperature": "Temperature",
+      "temperatureHint": "Defaults to 0 so the same question yields a comparable answer every time. Raising it makes runs irreproducible and scores incomparable.",
+      "maxTokens": "Max output tokens",
+      "maxTokensHint": "Per-question output cap. Setting it too low truncates answers and scores them wrong.",
+      "concurrency": "Concurrency",
+      "concurrencyHint": "2–8 is a sensible range. Higher values fold rate limiting and queueing into the quality result.",
+      "noneSelected": "Select at least one dataset",
+      "totalRequests": "{{count}} questions in total",
+      "estimateLoading": "Estimating cost…",
+      "estimatedCost": "Estimated cost ≈ {{cost}}",
+      "estimateUnavailable": "No pricing configured for this model — cost cannot be estimated",
+      "start": "Run health check",
+      "startCount": "Run health check ({{count}} datasets)",
+      "running": "Health check running…",
+      "cancel": "Stop",
+      "allSelectedNote": "{{count}} questions will run in sequence. Datasets are evaluated one at a time so concurrency pressure cannot contaminate the quality signal."
+    },
+    "progress": {
+      "title": "Health check in progress",
+      "dataset": "Dataset {{index}} / {{total}}",
+      "overall": "Overall progress",
+      "passed": "Passed",
+      "failed": "Failed",
+      "errors": "Unjudgeable",
+      "keepOpen": "You can switch to another page — progress continues."
+    },
+    "report": {
+      "title": "Health report",
+      "empty": "No results yet",
+      "partial": "In progress",
+      "done": "Complete",
+      "partialHint": "The health check has not finished; the results below cover the datasets completed so far.",
+      "subject": "Under test",
+      "overallRate": "Overall pass rate",
+      "notJudgeable": "Not judgeable",
+      "of": "{{pass}} of {{judged}} judgeable questions",
+      "questions": "Questions",
+      "totalCost": "Total cost",
+      "errorBanner": "{{count}} questions could not be judged (a provider error, or the grader had nothing to compare). They are excluded from the pass rate and are not counted as wrong answers.",
+      "newCheck": "New health check",
+      "conditions": {
+        "temperature": "Temperature {{value}}",
+        "maxTokens": "Max output {{value}}",
+        "concurrency": "Concurrency {{value}}",
+        "graders": "{{count}} grader types",
+        "frozen": "Questions were frozen at run time — editing the dataset later does not change this report"
+      },
+      "noResults": "This run produced no sample results at all (it was interrupted, or never started)"
+    },
+    "scorecard": {
+      "title": "Scorecard",
+      "dataset": "Dataset",
+      "samples": "{{count}} questions",
+      "passRate": "Pass rate",
+      "breakdown": "Pass / fail / unjudgeable",
+      "latency": "Avg latency",
+      "cost": "Cost",
+      "status": "Status",
+      "byCategory": "Pass rate by category",
+      "detail": "Per-question detail"
+    },
+    "detail": {
+      "filter": {
+        "all": "All {{count}}",
+        "failed": "Failures only {{count}}",
+        "error": "Unjudgeable only {{count}}"
+      },
+      "col": {
+        "index": "#",
+        "category": "Category",
+        "grader": "Grader",
+        "status": "Verdict",
+        "expected": "Expected",
+        "output": "Model output",
+        "reason": "Justification"
+      },
+      "fullInput": "Full question",
+      "fullExpected": "Expected answer",
+      "fullOutput": "Model output",
+      "emptyOutput": "(the model returned nothing)",
+      "justification": "Justification",
+      "providerError": "Provider error",
+      "tokens": "{{input}} in / {{output}} out tokens",
+      "latency": "Latency {{value}}",
+      "cost": "Cost {{value}}",
+      "usageEstimated": "Token counts are estimated",
+      "reasoningTokens": "{{count}} reasoning tokens"
+    },
+    "status": {
+      "pass": "Pass",
+      "fail": "Fail",
+      "error": "Unjudgeable"
+    },
+    "run": {
+      "status": {
+        "pending": "Pending",
+        "running": "Running",
+        "completed": "Completed",
+        "failed": "Failed",
+        "cancelled": "Cancelled",
+        "interrupted": "Interrupted"
+      }
+    },
+    "history": {
+      "title": "Past health checks",
+      "empty": "No health checks yet",
+      "name": "Name",
+      "target": "Dataset",
+      "passRate": "Pass rate",
+      "status": "Status",
+      "createdAt": "When",
+      "actions": "Actions",
+      "open": "Open report",
+      "errors": "{{count}} unjudgeable",
+      "confirmDelete": "Delete this health check?",
+      "drawerTitle": "Historical report",
+      "frozenHint": "This is a frozen snapshot of a past run; its verdicts do not change when grading rules change. Re-run the health check to see the current rules applied."
+    },
+    "grader": {
+      "exact": "Exact match",
+      "contains": "Contains keywords",
+      "regex": "Regex format",
+      "numericTolerance": "Numeric tolerance",
+      "jsonSchema": "JSON Schema",
+      "multipleChoice": "Multiple choice",
+      "setMatch": "Set match"
+    },
+    "grade": {
+      "exact": {
+        "match": "Matched the reference answer \"{{expected}}\"",
+        "mismatch": "Output \"{{output}}\" does not match the reference \"{{expected}}\""
+      },
+      "contains": {
+        "hit": "Matched {{matched}} of {{total}} keywords",
+        "miss": "Missing keywords: {{missing}} (of {{total}})"
+      },
+      "regex": {
+        "hit": "Matched {{matched}} of {{total}} format rules",
+        "miss": "{{missing}} of {{total}} format rules did not match"
+      },
+      "numeric": {
+        "match": "Result {{value}} is within {{expected}} ± {{tolerance}}",
+        "mismatch": "Result {{value}} differs from {{expected}} by {{diff}} (tolerance {{tolerance}})",
+        "unparsed": "No number found in the output; the reference answer is {{expected}}",
+        "expectedUnparsed": "The reference answer \"{{expected}}\" contains no number"
+      },
+      "json": {
+        "valid": "Output satisfies every constraint",
+        "invalid": "Output is not valid JSON: {{error}}",
+        "violations": "{{count}} constraint violation(s): {{violations}}"
+      },
+      "choice": {
+        "match": "Chose {{choice}}",
+        "mismatch": "Chose {{choice}}, the correct answer is {{expected}}",
+        "notFound": "No recognisable option letter in the output",
+        "expectedNotOption": "The reference answer \"{{expected}}\" is not one of the options {{choices}}"
+      },
+      "set": {
+        "match": "Sets are identical ({{expectedCount}} items)",
+        "mismatch": "{{missing}} missing, {{extra}} unexpected (expected {{expectedCount}} items)"
+      },
+      "emptyOutput": "The model returned nothing",
+      "missingExpected": "This question has no reference answer, so it cannot be graded",
+      "missingPatterns": "No matching pattern configured, so it cannot be graded",
+      "invalidRegex": "Invalid regex /{{pattern}}/: {{error}}",
+      "missingSchema": "No JSON Schema configured, so it cannot be graded",
+      "invalidSchema": "Malformed schema: {{error}}",
+      "unknownGrader": "Unknown grader \"{{grader}}\"",
+      "crashed": "Grader error: {{error}}",
+      "providerFailed": "Provider call failed: {{error}}",
+      "targetUnresolved": "Could not resolve this model: {{error}}",
+      "emptyResponse": "The provider returned an empty response, so there is nothing to grade",
+      "truncatedResponse": "The model used its entire {{maxTokens}}-token output budget without producing an answer ({{reasoningTokens}} of them were reasoning tokens). Raise \"Max output tokens\" and re-run."
     }
   }
 }

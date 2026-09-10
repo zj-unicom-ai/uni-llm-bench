@@ -16,7 +16,8 @@
   - [3.6 Workflow Engine](#36-workflow-engine)
   - [3.7 Template Library](#37-template-library)
   - [3.8 Model Identity Verification](#38-model-identity-verification)
-  - [3.9 Persistence Layer](#39-persistence-layer)
+  - [3.9 Quality Evaluation](#39-quality-evaluation)
+  - [3.10 Persistence Layer](#310-persistence-layer)
 - [4. Frontend](#4-frontend)
   - [4.1 Tech Stack](#41-tech-stack)
   - [4.2 Routes and Pages](#42-routes-and-pages)
@@ -226,7 +227,41 @@ A run reports both a `verdict` and a `score`, **deliberately reported separately
 
 Probes that need a reference (`requiresBaseline`) report `skipped` when no baseline exists, rather than guessing a result.
 
-### 3.9 Persistence Layer
+### 3.9 Quality Evaluation
+
+`services/qualityEngine.ts` + `services/graders/` + `services/qualityImport.ts`. Answers the third question — **is it right** — alongside the other two pillars: benchmarks/workflows answer "how fast and how expensive", identity verification answers "is it the model it claims to be".
+
+**Three grading tiers. A question a rule can grade is never sent to a judge model:**
+
+| Tier | Graders | Fits | Cost per sample | Reproducibility |
+| --- | --- | --- | --- | --- |
+| **L1 deterministic** | `exact`, `contains`, `regex`, `numeric_tolerance`, `json_schema`, `multiple_choice`, `set_match` | math, extraction, structured output, multiple choice, format adherence | 0 (local) | full |
+| L2 LLM-as-judge | planned | writing, translation, summarisation, open questions | one judge call | approximate |
+| L3 human | planned | calibration sets, disputed samples | human time | low |
+
+Only L1 ships today. The grader registry lives in `services/graders/index.ts`: adding a grader means adding a file and one registry line, and the engine never learns about individual graders. Every grader satisfies
+`(output, expected, config) => { status, score, detailKey, params, detail }` and **never throws** — when it cannot reach a verdict it returns `status: 'error'`, which is counted separately. `detailKey` is rendered by the frontend through i18n; `detail` carries the same information in English and is what exports contain, so translation never changes an artifact.
+
+**Three hard constraints** (locked down by contract tests):
+
+1. **A provider failure is recorded as `error`, never as a score of 0.** When the endpoint 401s, the report shows N errors and a `null` pass rate (rendered as "not judgeable"), not a plausible-looking 0%.
+2. **`passRate = pass / (pass + fail)`** — errored samples are excluded from the denominator, and the rate is `null` rather than 0 when nothing was judgeable.
+3. **`quality_runs.dataset_snapshot` freezes the samples at creation**, so editing the dataset later cannot rewrite a historical report.
+4. **A 200 response with empty content is `error`, not a wrong answer** (`errorCategory: 'empty_response'`). A reasoning model can
+   spend its whole output budget thinking and get truncated before it emits anything; recording that as "wrong" charges the model
+   for a configuration problem. When the output-token count reaches `maxTokens` the justification names the exhausted budget and
+   points at the cap. That is why the default `maxTokens` is 4096 rather than 1024 — a ceiling is not billed, only used tokens are.
+
+**Measurement conditions are pinned explicitly**: `temperature = 0` and **non-streaming** by default (quality evaluation is not measuring latency, and a streaming path only adds failure modes), with every target sharing one set of parameters. These ride on the 7th parameter of
+`DynamicProvider.execute()`, `GenerationParams` — **the provider layer needs no changes**.
+
+**Orchestration**: one dataset × one model = one run; a "health report" is N runs started sequentially by the frontend. Sequential rather than parallel is deliberate — hitting six datasets at once folds rate limiting and queueing into the quality result, and neither has anything to do with model quality.
+
+**Datasets**: 6 built-in datasets, 66 questions in total. GSM8K (20 questions, MIT) and HellaSwag (16 questions, MIT) are deterministic subsets of the upstream originals (regenerate with `scripts/generate-quality-seed.py`); provenance and the full licence notices live in `services/qualitySeed/ATTRIBUTION.md`. The other four (structured extraction, instruction format, field normalisation, set enumeration — 30 questions) are authored by this project. TruthfulQA is **deliberately excluded** because its generative task makes string matching produce false negatives; CMMLU is **deliberately excluded** because CC BY-NC-SA 4.0 is incompatible with this project's MIT licence. Users can import their own datasets as JSONL / CSV and get a row-level validation report first (`services/qualityImport.ts`) — an invalid row is never silently accepted.
+
+`qualitySeed.test.ts` checks all 66 bundled questions for self-consistency: static preflight must be clean, a garbage answer must grade `fail` rather than `error`, the reference answer must grade `pass`, and every authored regex question has a sample answer that actually matches. The failure mode this guards against — a mistyped regex making a question unpassable for every model — would show up in a real run only as "the model is bad".
+
+### 3.10 Persistence Layer
 
 `services/database.ts` opens the single SQLite connection (WAL mode, 5-second busy timeout), located at `backend/data/benchmarks.db`. There is no ORM — each store is responsible for its own `CREATE TABLE` and SQL.
 
@@ -262,6 +297,7 @@ All stores share the same structure: create table → load fully into an in-memo
 | `/modules` | Template Library | CRUD for reusable task templates |
 | `/modellibrary` | Model Library | provider CRUD, connection test, per-model pricing |
 | `/identity` | Model Identity | collect baselines and verify endpoints |
+| `/quality` | Quality | one model across several datasets; health report with per-question drill-down and export |
 | `/playground` | Arena | single prompt, streaming, vision input, generation parameters, history sidebar |
 
 `App.tsx` derives the current page from the pathname, used for the top bar title and guided tour; `/history/:id` is carried by a small wrapper component because `useParams()` can only read values inside the matching `<Route element>`.
@@ -323,7 +359,7 @@ There are only two resource files: `i18n/en.json` and `i18n/zh.json`. Language i
 
 ## 5. Data Model
 
-There are 8 tables in total, each created on demand by its own store.
+There are 10 tables in total, each created on demand by its own store.
 
 ### `users`
 
@@ -425,6 +461,36 @@ There are 8 tables in total, each created on demand by its own store.
 | `gen_params` | TEXT (JSON) | generation parameters (added column) |
 | `error` | TEXT | |
 | `created_at` | TEXT | ISO timestamp |
+### `quality_datasets`
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | TEXT PK | `builtin:<slug>` for built-ins, `ds_xxxxxxxx` for user-created |
+| `name` / `description` | TEXT | |
+| `source` | TEXT | builtin / import / manual |
+| `samples` | TEXT (JSON) | `QualitySample[]` (question, reference answer, grader and its config) |
+| `sample_count` | INTEGER | denormalised so the list endpoint never parses the JSON |
+| `tags` | TEXT (JSON) | |
+| `note` | TEXT | provenance / licence notice, shown verbatim in the UI and exports |
+| `builtin` | INTEGER | 1 = built-in, cannot be edited or deleted by users |
+| `created_at` / `updated_at` | TEXT | ISO timestamps |
+
+### `quality_runs`
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | TEXT PK | `qr_xxxxxxxx` |
+| `name` / `description` | TEXT | |
+| `status` | TEXT | pending / running / completed / failed / cancelled / interrupted |
+| `dataset_id` / `dataset_name` | TEXT | name denormalised so history survives dataset deletion |
+| `dataset_snapshot` | TEXT (JSON) | **samples frozen at creation**, never written again |
+| `targets` | TEXT (JSON) | array of `configId:modelName` |
+| `target_labels` | TEXT (JSON) | key → display name |
+| `params` | TEXT (JSON) | temperature / maxTokens / concurrency / repeats |
+| `results` | TEXT (JSON) | per-target `QualityTargetSummary`, including per-question detail |
+| `progress` | TEXT (JSON) | `{ completed, total, currentTarget }` |
+| `created_at` / `started_at` / `completed_at` / `error` | TEXT | |
+
 ---
 
 ## 6. API Reference
@@ -513,6 +579,27 @@ All routes are prefixed with `/api` and require a Bearer JWT unless noted.
 | GET | `/identity/runs/:id` | single verification |
 | DELETE | `/identity/runs/:id` | delete verification |
 
+### Quality Evaluation
+
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/quality/graders` | grader catalog (needs a reference answer, configurable fields) |
+| GET | `/quality/datasets` | dataset list (no samples, counts only) |
+| GET | `/quality/datasets/:id` | dataset detail (with samples) |
+| POST | `/quality/datasets` | create manually |
+| PUT | `/quality/datasets/:id` | update (built-ins refused, 403) |
+| DELETE | `/quality/datasets/:id` | delete (built-ins refused, 403) |
+| POST | `/quality/datasets/import` | import JSONL / CSV and return a row-level report; `persist: false` validates only |
+| POST | `/quality/estimate` | pre-run cost estimate, assumptions included |
+| POST | `/quality/runs` | create and start a run; an unresolvable target is a 400 before any tokens are spent |
+| GET | `/quality/runs` | history (paged, default 100, cap 500) |
+| GET | `/quality/runs/:id` | single run |
+| GET | `/quality/runs/:id/stream` | SSE progress |
+| POST | `/quality/runs/:id/cancel` | cancel |
+| GET | `/quality/runs/:id/export` | export JSON / CSV |
+| DELETE | `/quality/runs/:id` | delete (refused while running, 400) |
+
+
 ---
 
 ## 7. Real-time (SSE) Contract
@@ -523,6 +610,7 @@ All streams send `data: <json>\n\n` frames.
 | --- | --- |
 | `GET /api/benchmarks/:id/stream` | `progress`, `error`, `complete`, `done` |
 | `GET /api/workflows/:id/stream` | `workflow:init`, `task:start`, `task:progress`, `task:complete`, `task:error`, `cooldown`, `workflow:complete` |
+| `GET /api/quality/runs/:id/stream` | `quality:init`, `quality:progress`, `quality:target`, `quality:complete`, `quality:error` |
 | `POST /api/playground/stream` | `chunk`, `reasoning`, `error`, `done`, ending with a literal `[DONE]` frame |
 
 The workflow stream replays a `workflow:init` carrying the current snapshot when a connection is established; if the run has already finished it immediately sends `workflow:complete` — this is exactly why a page refresh can reconnect.
@@ -576,9 +664,10 @@ Because state is concentrated in a single SQLite file and a few secret files und
 Both frontend and backend use Vitest. Key coverage areas:
 
 - **Backend** — auth middleware and routes (including one-time tokens), encryption and secret management, provider adapter behavior and caching, validation schema, store synchronization, workflow engine (unit / execution / integration).
-- **Frontend** — each hook (`useWorkflow`, `useProviders`, `usePlayground`, `useAuth`), pages (`IdentityPage`), utilities (`costEstimate`, `tokenCount`, `demo`), and an **i18n consistency test**: `en.json` and `zh.json` fail the moment they drift out of sync.
+- **Frontend** — each hook (`useWorkflow`, `useProviders`, `usePlayground`, `useAuth`), pages (`IdentityPage`, `QualityReport`, `QualitySampleTable`, `QualityRunForm`), utilities (`costEstimate`, `tokenCount`, `demo`), and an **i18n consistency test**: `en.json` and `zh.json` fail the moment they drift out of sync.
+- **Quality evaluation** — graders by boundary case (46), dataset import (17), engine contract (16), routes (23), bundled-dataset self-consistency (14). The frontend adds 15 covering the same contract at render time: a `null` pass rate must read "not judgeable", never 0%.
 
-Contract tests lock in the measurement-credibility guarantees from §3.5 — for example, `executeWithRetry` must reject when the provider throws an error, so future changes cannot silently reintroduce simulated results.
+Contract tests lock in the measurement-credibility guarantees from §3.5 — for example, `executeWithRetry` must reject when the provider throws an error, so future changes cannot silently reintroduce simulated results. Quality evaluation (§3.9) follows the same approach: a provider failure must be recorded as `error` with a `null` pass rate, and an `error` must never be folded into a score of 0.
 
 ---
 
