@@ -1,0 +1,10 @@
+services:
+  app:
+    image: zj-unicom-ai/uni-llm-bench:${TAG:-latest}
+    ports:
+      - "${PORT:-3001}:3001"
+    volumes:
+      - ./data:/app/backend/data
+    env_file:
+      - .env
+    restart: unless-stopped

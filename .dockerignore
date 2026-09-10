@@ -1,0 +1,13 @@
+node_modules
+**/node_modules
+backend/dist
+frontend/dist
+backend/data/*.db
+.git
+.gitignore
+.claude
+.gstack
+*.md
+docs
+design
+LICENSE

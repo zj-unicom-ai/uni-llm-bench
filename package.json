@@ -1,0 +1,27 @@
+{
+  "name": "uni-llm-bench",
+  "private": true,
+  "description": "Root package for git hooks and shared tooling",
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "prettier": "^3.8.2"
+  },
+  "lint-staged": {
+    "frontend/**/*.{ts,tsx}": [
+      "prettier --write",
+      "bash -c 'cd frontend && npx eslint . --max-warnings 0'"
+    ],
+    "frontend/**/*.{js,jsx}": [
+      "prettier --write"
+    ],
+    "backend/**/*.{ts,js}": [
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml}": "prettier --write"
+  },
+  "scripts": {
+    "prepare": "husky"
+  },
+  "version": "0.0.1"
+}

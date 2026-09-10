@@ -1,0 +1,49 @@
+{
+  "name": "uni-llm-bench-backend",
+  "version": "0.0.1",
+  "description": "Uni LLM Bench - Backend",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "nodemon --watch src --ext ts,tsx,json --legacy-watch --exec tsx src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "better-sqlite3": "^12.8.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.4.0",
+    "express": "^4.18.2",
+    "express-rate-limit": "^8.3.2",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "node-cron": "^4.2.1",
+    "uuid": "^9.0.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/node": "^20.10.0",
+    "@types/node-cron": "^3.0.11",
+    "@types/supertest": "^7.2.0",
+    "@types/uuid": "^9.0.7",
+    "eslint": "^10.2.0",
+    "eslint-config-prettier": "^10.1.8",
+    "nodemon": "^3.1.14",
+    "supertest": "^7.2.2",
+    "tsx": "^4.6.2",
+    "typescript": "^5.3.2",
+    "typescript-eslint": "^8.58.1",
+    "vitest": "^4.1.4"
+  }
+}

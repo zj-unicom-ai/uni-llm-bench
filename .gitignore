@@ -1,0 +1,69 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build output
+backend/dist/
+frontend/dist/
+backend/public/
+
+# Database
+backend/data/*.db
+backend/data/
+/data/
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+nohup.out
+frontend/nohup.out
+backend/nohup.out
+
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Tooling
+.gstack/
+.claude/
+
+# Test & Coverage
+coverage/
+.nyc_output/
+
+# Cache
+.cache/
+.parcel-cache/
+.vite/
+*.tsbuildinfo
+
+# Local test scripts
+demo-*.js
+*.spec.js
+
+# Screenshots (except docs)
+*.png
+*.jpg
+*.jpeg
+*.webp
+!frontend/src/assets/**
+!docs/**
+
+# Misc
+*.pem
+*.key
+scripts/test-cached-tokens.mjs

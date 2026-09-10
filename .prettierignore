@@ -1,0 +1,15 @@
+dist
+node_modules
+*.db
+*.sqlite
+*.sqlite3
+data
+nohup.out
+frontend/dist
+backend/dist
+CHANGELOG.md
+CHANGELOG-cn.md
+README.md
+README-cn.md
+CLAUDE.md
+docker-compose.yml
