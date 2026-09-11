@@ -2,9 +2,20 @@
 
 # Uni LLM Bench
 
-**A self-hosted platform for LLM API performance benchmark, cost estimation, and Model Identity verification.**
+**A self-hosted, lightweight LLM API benchmarking platform — model fingerprint comparison + model quality evaluation.**
 
-Run benchmarks against any OpenAI-compatible endpoint from within your own network, and verify whether the endpoint is actually the model it claims to be. A single Node.js process plus a single SQLite file — no external services required.
+Benchmark any OpenAI-compatible endpoint from inside your own network, use fingerprint comparison to verify whether the endpoint is really the model it claims to be, and use deterministic graders to evaluate whether those answers are actually right. One Node.js process plus one SQLite file — no external services required.
+
+---
+
+## Core positioning
+
+| Keyword | In one line |
+|---|---|
+| 🏠 **Self-hosted** | The whole stack runs on your own machine: no Redis, no Postgres, no telemetry; the app itself has zero external dependencies and can be deployed in an isolated network |
+| 🪶 **Lightweight** | One Node.js process plus one SQLite file; up and running with a one-line script or Docker Compose, and a backup is just that one file |
+| 🕵️ **Model fingerprint comparison** | 10 fingerprint probes collected across two layers, compared item by item against a trusted baseline, and decided by hard criteria (consistent / suspicious / mismatch) |
+| 🧭 **Model quality evaluation** | 7 deterministic graders + 6 built-in datasets (66 questions) answer the question performance numbers cannot: is the answer actually right? |
 
 ---
 
@@ -13,25 +24,23 @@ Run benchmarks against any OpenAI-compatible endpoint from within your own netwo
 Uni LLM Bench makes "trustworthy" the default out of the box, rather than a toggle you have to validate afterward:
 
 - **Numbers don't lie** — As soon as an API errors out, it is thrown honestly; reports are never padded with "looks reasonable" simulated data. Metrics that can't be measured are left blank — never faked with a coefficient. Every millisecond and every cent you see was really run.
-- **Confirm you're actually calling that model** — Model Identity uses a baseline comparison of 10 fingerprint probes across two layers (protocol layer + tokenizer layer), giving you an unambiguous "yes / no" rather than a similarity score open to interpretation.
+- **Model fingerprint comparison — confirm you're actually calling that model** — Model Identity uses a baseline comparison of 10 fingerprint probes across two layers (protocol layer + tokenizer layer), giving you an unambiguous "yes / no" rather than a similarity score open to interpretation.
+- **Model quality evaluation — someone grades whether it's right** — 7 deterministic graders run entirely locally: zero cost, fully reproducible; anything a rule cannot judge is reported as unjudgeable, never counted as wrong.
 - **Know the cost before you run** — Configure a model's unit price once, and every Workflow shows a cost estimation before you press "Start" (including the savings from cache hits), so you're never surprised by the bill afterward.
-- **Truly yours** — A single process plus a single-file database, with no Redis, no Postgres, and no telemetry reporting. Your data stays on your own machine, and the architecture is simple enough that you can fix it yourself when something breaks.
+- **Self-hosted + lightweight — truly yours** — A single process plus a single-file database, with no Redis, no Postgres, and no telemetry reporting. Your data stays on your own machine, and the architecture is simple enough that you can fix it yourself when something breaks.
 
 ---
 
 ## Highlights
 
-| |                                                     |
-|---|-----------------------------------------------------|
-| 🔬 **Measurement trustworthiness** | Every value is real and traceable: fail loud, never leave simulated values, show N/A when unmeasurable, count retries in latency, structurally classify errors      |
-| 🕵️ **Model Identity verification** | 10 fingerprint probes in two layers (protocol layer + tokenizer layer), baseline comparison, conclusions under hard criteria                |
-| 🧭 **Quality evaluation** | 7 deterministic graders + 6 built-in datasets (66 questions); unmeasurable questions are reported as unjudgeable, not wrong, with the raw output and grading evidence kept per question |
-| 🧪 **Workflow engine** | Multi-task serial benchmark, each task with its own prompt / concurrency (1–5000) / iterations (1–10M), with warm-up     |
-| 💰 **Cost estimation** | Per-model unit price per million tokens, including cache read tiers, with estimated cost visible before running                |
-| 📚 **Template Library** | 20 built-in templates + full CRUD for custom templates, persistently stored                       |
-| ⚔️ **Arena** | Two Providers/Models face off on the same prompt, with streaming side-by-side response comparison                               |
-| 🎨 **Zero-dependency onboarding** | Self-built spotlight-style guided tour, status-following Workflow step bar, bilingual (Chinese/English)                         |
-| 🪶 **Lightweight self-hosted** | Single Node.js process + SQLite (WAL), deployable via Docker Compose or a one-line script |
+| | |
+|---|---|
+| 🔬 **Measurement trustworthiness** | Every value is real and traceable: fail loud, never leave simulated values, show N/A when unmeasurable, count retries in latency, structurally classify errors |
+| 🧪 **Workflow engine** | Multi-task serial benchmark, each task with its own prompt / concurrency (1–5000) / iterations (1–10M), with warm-up |
+| 💰 **Cost estimation** | Per-model unit price per million tokens, including cache read tiers, with estimated cost visible before running |
+| 📚 **Template Library** | 20 built-in templates + full CRUD for custom templates, persistently stored |
+| ⚔️ **Arena** | Two Providers/Models face off on the same prompt, with streaming side-by-side response comparison |
+| 🎨 **Zero-dependency onboarding** | Self-built spotlight-style guided tour, status-following Workflow step bar, bilingual (Chinese/English) |
 
 ---
 
@@ -46,25 +55,9 @@ Uni LLM Bench makes "trustworthy" the default out of the box, rather than a togg
 - Stop on failure, override Provider selection per task
 - SSE real-time progress: you can switch to another page after starting, and progress syncs back live
 
-### Model Library
+### Model fingerprint comparison (Model Identity)
 
-- Unified management of Providers and Models: endpoints, API keys (encrypted storage), model capabilities
-- Four formats: OpenAI, Anthropic, Google Gemini, and generic OpenAI-compatible (DeepSeek, Mistral, Ollama, vLLM, etc.)
-- Optional model unit price (input / output / cache read / cache write, per million tokens) to drive cost estimation
-- "Test connection" available to validate configuration
-
-### Template Library
-
-- 20 built-in templates, shipped with the library: smoke test, TTFT latency profiling, output throughput gradient and concurrency ladder, streaming comparison batch,
-  long-context throughput, cost-effectiveness audit, reliability and stability, and load mixes close to real business (knowledge Q&A, long-text summarization,
-  code generation, information extraction, function calling and structured output, creative writing, text translation, multi-turn dialogue, Chinese RAG and hallucination resistance,
-  mathematical reasoning, multimodal vision benchmark, real-traffic mix)
-- Full CRUD for custom templates with persistence
-- One-click load a template into the Workflow form
-
-### Model Identity verification
-
-This module **ignores the label and fingerprints the endpoint directly**.
+This module **never asks for the label — it fingerprints the endpoint and compares it item by item against a baseline**, landing on a definite yes / no.
 
 - **T0 · Protocol-layer probes** — Model name echo, illegal-model error shape, logprobs support, JSON mode support, prefix cache replay detection
 - **T1 · Tokenizer probes** — How the endpoint tokenizes fixed probe text (English / Chinese / code / emoji) exposes its underlying tokenizer
@@ -72,9 +65,9 @@ This module **ignores the label and fingerprints the endpoint directly**.
 - **Hard criteria** — Conclusion is one of: `consistent` / `suspicious` / `mismatch` / `undetermined` / `error`; one fatal signal takes priority over any weighted score
 - **Evidence table** — Each probe lists its baseline and measured values, so you can verify the conclusion yourself
 
-### Quality evaluation
+### Model quality evaluation
 
-Answers the third question — **is it right**. Complements the performance benchmark ("how fast and how expensive") and identity verification ("is it the model it claims to be").
+Answers the third question — **is it right**. Together with the performance benchmark (how fast and how expensive) and model fingerprint comparison (is it the model it claims to be), it closes the loop on model evaluation.
 
 - **7 deterministic graders** — exact match, keyword containment, regex format, numeric tolerance, JSON Schema, multiple choice, set match. All run locally: zero cost, fully reproducible
 - **A question a rule can grade never reaches a judge model** — a judge is both an expense and a bias source, so it is reserved for subjective tasks (L2, planned)
@@ -92,7 +85,21 @@ Answers the third question — **is it right**. Complements the performance benc
 | Unjudgeable count | provider errors or uncomparable questions, shown next to the pass rate rather than in a footnote |
 | Avg latency / cost | reuses the existing statistical conventions, and only over samples that actually returned a response |
 
-> **Dataset licensing**: TruthfulQA is a generative task where string matching produces false negatives, so it is deliberately excluded; CMMLU is CC BY-NC-SA 4.0, incompatible with this project's MIT licence, so it is excluded too. Full third-party notices live in `backend/src/services/qualitySeed/ATTRIBUTION.md`.
+### Model Library
+
+- Unified management of Providers and Models: endpoints, API keys (encrypted storage), model capabilities
+- Four formats: OpenAI, Anthropic, Google Gemini, and generic OpenAI-compatible (DeepSeek, Mistral, Ollama, vLLM, etc.)
+- Optional model unit price (input / output / cache read / cache write, per million tokens) to drive cost estimation
+- "Test connection" available to validate configuration
+
+### Template Library
+
+- 20 built-in templates, shipped with the library: smoke test, TTFT latency profiling, output throughput gradient and concurrency ladder, streaming comparison batch,
+  long-context throughput, cost-effectiveness audit, reliability and stability, and load mixes close to real business (knowledge Q&A, long-text summarization,
+  code generation, information extraction, function calling and structured output, creative writing, text translation, multi-turn dialogue, Chinese RAG and hallucination resistance,
+  mathematical reasoning, multimodal vision benchmark, real-traffic mix)
+- Full CRUD for custom templates with persistence
+- One-click load a template into the Workflow form
 
 ### Arena
 
@@ -152,6 +159,7 @@ The core design goal is to eliminate the fatal flaw of "measurement tools return
 | Throughput | Requests per second under concurrency pressure |
 | Success rate | Ratio of successful vs. failed requests, with `retryRate` |
 | Cost estimation | Per-model cost breakdown based on configured unit price, including cache tiers |
+| Quality pass rate | dataset-driven per-question grading; unjudgeable questions stay out of the denominator (see Model quality evaluation) |
 
 ---
 
@@ -160,7 +168,7 @@ The core design goal is to eliminate the fatal flaw of "measurement tools return
 <table>
   <tr>
     <td align="center"><b>Workflow — Configure and Run</b></td>
-    <td align="center"><b>Model Identity — Verification</b></td>
+    <td align="center"><b>Model Fingerprint Comparison — Verification</b></td>
   </tr>
   <tr>
     <td><img src="docs/screenshots/screenshot-workflow.png" width="500" /></td>
@@ -174,7 +182,7 @@ The core design goal is to eliminate the fatal flaw of "measurement tools return
     <td><img src="docs/screenshots/screenshot-detail.png" width="500" /></td>
   </tr>
   <tr>
-    <td align="center"><b>Quality Evaluation — Model Health Check</b></td>
+    <td align="center"><b>Model Quality Evaluation — Model Health Check</b></td>
   </tr>
   <tr>
     <td><img src="docs/screenshots/screenshot-quality.png" width="500" /></td>
@@ -182,6 +190,8 @@ The core design goal is to eliminate the fatal flaw of "measurement tools return
 </table>
 
 ## Quick Start
+
+The payoff of **self-hosted + lightweight** is that there is nothing to provision first: no Redis, no Postgres, no object storage, and no sign-up with any third party. All you need is Node.js 20+ (or Docker) to have the complete platform running on your own machine.
 
 ### Option 1: One-line script (production)
 
@@ -261,8 +271,8 @@ All configuration lives in a single `.env` file at the project root:
 │                       │                    │             │
 │  ┌────────────────────▼────────────────────▼───────────┐ │
 │  │                      Service layer                  │ │
-│  │  Benchmark engine · Workflow engine                 │ │
-│  │  Identity engine · Quality engine · Template store  │ │
+│  │  Benchmark engine · Workflow engine · Templates     │ │
+│  │  Fingerprint engine · Quality engine                │ │
 │  └────────────────────┬────────────────────────────────┘ │
 │                       │                                  │
 │  ┌────────────────────▼────────────────────────────────┐ │
@@ -277,7 +287,7 @@ All configuration lives in a single `.env` file at the project root:
            └──────────────────────────┘
 ```
 
-The entire stack runs in a **single Node.js process** — no Redis, no Postgres, no external dependencies. Vite compiles the frontend into static files served by Express; SQLite (WAL mode) stores benchmarks, workflows, templates, identity baselines, and Provider config in a single file, so backing up is just copying that file.
+The entire stack runs in a **single Node.js process** — **self-hosted**: no Redis, no Postgres, no external dependencies and no telemetry; **lightweight**: one process and one database file is the entire runtime footprint. Vite compiles the frontend into static files served by Express; SQLite (WAL mode) stores benchmarks, workflows, templates, identity baselines, and Provider config in a single file, so backing up is just copying that file.
 
 | Layer | Tech stack |
 |---|---|
