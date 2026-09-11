@@ -328,7 +328,7 @@ The entire stack runs in a **single Node.js process** — **self-hosted**: no Re
 
 ## Documentation
 
-- [Design document (Chinese)](design/DESIGN.md) — Architecture, data model, API reference, SSE contract
+- [Design document](design/DESIGN-en.md) — Architecture, data model, API reference, SSE contract
 
 ## Upstream project
 | Project                                                    | Description |
@@ -337,7 +337,7 @@ The entire stack runs in a **single Node.js process** — **self-hosted**: no Re
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code conventions, and the PR process; see [SECURITY.md](SECURITY.md) for security issues.
+See [CONTRIBUTING-en.md](CONTRIBUTING-en.md) for development setup, code conventions, and the PR process; see [SECURITY-en.md](SECURITY-en.md) for security issues.
 
 ## License
 
