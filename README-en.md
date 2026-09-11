@@ -316,7 +316,7 @@ The entire stack runs in a **single Node.js process** — **self-hosted**: no Re
 │       ├── i18n/          # en.json / zh.json (kept in sync, validated by tests)
 │       ├── services/      # API client
 │       ├── utils/         # token counting, cost estimation, demo mode
-│       └── data/          # ShareGPT prompt corpus (1k–256k)
+│       └── data/          # long-context synthetic prompt corpus (1k–256k, project-authored)
 ├── design/                # Design docs (Chinese & English)
 ├── docs/screenshots/      # README images
 ├── docker-compose.yml

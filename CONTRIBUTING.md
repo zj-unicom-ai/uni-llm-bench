@@ -57,7 +57,7 @@ docker compose up -d
 │       ├── i18n/          # en.json / zh.json（保持同步，有测试校验）
 │       ├── services/      # API 客户端
 │       ├── utils/         # token 计数、成本预估、演示模式
-│       └── data/          # ShareGPT 提示词语料（1k–256k）
+│       └── data/          # 长上下文合成语料（1k–256k，项目自研）
 ├── design/                # 设计文档（中英双份）
 ├── docs/screenshots/      # README 配图
 ├── docker-compose.yml

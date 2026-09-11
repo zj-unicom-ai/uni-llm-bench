@@ -57,7 +57,7 @@ docker compose up -d
 │       ├── i18n/          # en.json / zh.json (kept in sync, enforced by tests)
 │       ├── services/      # API clients
 │       ├── utils/         # token counting, cost estimation, demo mode
-│       └── data/          # ShareGPT prompt corpus (1k–256k)
+│       └── data/          # long-context synthetic prompt corpus (1k–256k, project-authored)
 ├── design/                # design docs (Chinese and English)
 ├── docs/screenshots/      # README images
 ├── docker-compose.yml

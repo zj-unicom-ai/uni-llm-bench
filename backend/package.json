@@ -1,6 +1,7 @@
 {
   "name": "uni-llm-bench-backend",
   "version": "0.0.1",
+  "license": "MIT",
   "description": "Uni LLM Bench - Backend",
   "main": "dist/index.js",
   "scripts": {

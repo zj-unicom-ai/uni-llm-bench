@@ -745,7 +745,7 @@ uni-llm-bench/
 │       ├── services/api.ts       # fetch 封装、一次性 token
 │       ├── i18n/                 # en.json · zh.json · 一致性测试
 │       ├── utils/                # tokenCount · costEstimate · demo
-│       └── data/                 # ShareGPT 提示词语料（1k–256k）
+│       └── data/                 # 长上下文合成语料（1k–256k，项目自研）
 ├── design/
 │   ├── DESIGN.md                 # 本文（中文）
 │   └── DESIGN-en.md              # 英文版

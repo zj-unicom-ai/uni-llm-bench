@@ -698,7 +698,7 @@ uni-llm-bench/
 │       ├── services/api.ts       # fetch wrapper, one-time token
 │       ├── i18n/                 # en.json · zh.json · consistency test
 │       ├── utils/                # tokenCount · costEstimate · demo
-│       └── data/                 # ShareGPT prompt corpus (1k–256k)
+│       └── data/                 # long-context synthetic prompt corpus (1k–256k, project-authored)
 ├── design/
 │   ├── DESIGN.md                 # this document (Chinese)
 │   └── DESIGN-en.md              # English version

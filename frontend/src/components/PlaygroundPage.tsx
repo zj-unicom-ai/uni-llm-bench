@@ -39,7 +39,7 @@ import { useTokenCount } from '../utils/tokenCount';
 const { TextArea } = Input;
 
 const STANDARD_PRESETS = PRESET_PROMPTS.filter((p) => p.category === 'standard');
-const SHAREGPT_PRESETS = PRESET_PROMPTS.filter((p) => p.category === 'long-context');
+const LONG_CONTEXT_PRESETS = PRESET_PROMPTS.filter((p) => p.category === 'long-context');
 
 const A_COLOR = '#4096ff'; // accent-blue
 const B_COLOR = '#8a6dff'; // accent-violet
@@ -794,7 +794,7 @@ export function PlaygroundPage() {
                       {t('playground.longContext')}
                     </button>
                   ) : (
-                    SHAREGPT_PRESETS.map((preset) => (
+                    LONG_CONTEXT_PRESETS.map((preset) => (
                       <button
                         key={preset.label}
                         onClick={async () => {

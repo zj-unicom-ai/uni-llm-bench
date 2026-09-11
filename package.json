@@ -1,6 +1,7 @@
 {
   "name": "uni-llm-bench",
   "private": true,
+  "license": "MIT",
   "description": "Root package for git hooks and shared tooling",
   "devDependencies": {
     "husky": "^9.1.7",
