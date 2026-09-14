@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'node:crypto';
 import { getDb } from './database';
 import { QualityDataset, QualityDatasetSummary, QualitySample } from '../types';
 import { SEED_QUALITY_DATASETS } from './qualitySeed';
@@ -188,7 +188,7 @@ class QualityDatasetStore {
 
   create(input: CreateDatasetInput): QualityDataset {
     const now = new Date().toISOString();
-    const id = `ds_${uuidv4().slice(0, 8)}`;
+    const id = `ds_${randomUUID().slice(0, 8)}`;
     const samples = withSampleIds(input.samples, id);
     const record: QualityDataset = {
       id,

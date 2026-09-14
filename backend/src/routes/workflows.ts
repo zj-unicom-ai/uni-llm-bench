@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'node:crypto';
 import { BenchmarkWorkflow, WorkflowTask, LEGACY_PROVIDER_IDS } from '../types';
 import { workflowStore } from '../services/workflowStore';
 import { executeWorkflow, subscribeWorkflow, cancelWorkflow, backfillTokenStats } from '../services/workflowEngine';
@@ -56,7 +56,7 @@ router.post('/', validate(CreateWorkflowSchema), async (req: Request, res: Respo
         },
         index: number,
       ) => ({
-        id: `task_${uuidv4().slice(0, 8)}`,
+        id: `task_${randomUUID().slice(0, 8)}`,
         name: t.name || `Task ${index + 1}`,
         description: t.description,
         order: index,
@@ -80,7 +80,7 @@ router.post('/', validate(CreateWorkflowSchema), async (req: Request, res: Respo
     );
 
     const workflow: BenchmarkWorkflow = {
-      id: `wf_${uuidv4().slice(0, 8)}`,
+      id: `wf_${randomUUID().slice(0, 8)}`,
       name,
       description,
       status: 'draft',
@@ -313,14 +313,14 @@ router.post('/:id/duplicate', (req: Request, res: Response) => {
   }
 
   const dup: BenchmarkWorkflow = {
-    id: `wf_${uuidv4().slice(0, 8)}`,
+    id: `wf_${randomUUID().slice(0, 8)}`,
     name: `${workflow.name} (copy)`,
     description: workflow.description,
     status: 'draft',
     providers: workflow.providers,
     tasks: workflow.tasks.map((t, i) => ({
       ...t,
-      id: `task_${uuidv4().slice(0, 8)}`,
+      id: `task_${randomUUID().slice(0, 8)}`,
       order: i,
     })),
     options: workflow.options

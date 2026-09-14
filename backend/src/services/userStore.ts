@@ -1,5 +1,5 @@
 import * as bcrypt from 'bcryptjs';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'node:crypto';
 import { getDb } from './database';
 
 export interface UserRecord {
@@ -50,7 +50,7 @@ class UserStore {
         const isDefaultPassword = !process.env.AUTH_PASSWORD;
         const hash = bcrypt.hashSync(password, 10);
         const now = new Date().toISOString();
-        const id = uuidv4();
+        const id = randomUUID();
 
         this.db
           .prepare(

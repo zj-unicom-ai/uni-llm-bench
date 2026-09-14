@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { providerStore } from '../services/providerStore';
 import { testProviderConnection } from '../providers/adapter';
 import { ProviderConfigInput } from '../types';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'node:crypto';
 import { validate } from '../validation/middleware';
 import { ProviderConfigInputSchema, ProviderConfigUpdateSchema, TestConnectionSchema } from '../validation/schemas';
 
@@ -24,7 +24,7 @@ router.post('/', validate(ProviderConfigInputSchema), (req: Request, res: Respon
     apiKey: apiKey.trim(),
     format,
     models: models.map((m) => ({
-      id: m.id || uuidv4(),
+      id: m.id || randomUUID(),
       name: m.name.trim(),
       displayName: m.displayName?.trim() || undefined,
       contextSize: m.contextSize || 4096,
@@ -92,7 +92,7 @@ router.put('/:id', validate(ProviderConfigUpdateSchema), (req: Request, res: Res
   if (format) input.format = format;
   if (models && Array.isArray(models) && models.length > 0) {
     input.models = models.map((m: Record<string, unknown>) => ({
-      id: (m.id as string) || uuidv4(),
+      id: (m.id as string) || randomUUID(),
       name: ((m.name as string) || '').trim(),
       displayName: (m.displayName as string)?.trim() || undefined,
       contextSize: (m.contextSize as number) || 4096,

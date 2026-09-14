@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'node:crypto';
 import { getDb } from './database';
 import { WorkflowTemplate, SEED_TEMPLATES } from './templateSeed';
 
@@ -130,7 +130,7 @@ class WorkflowTemplateStore {
     const now = new Date().toISOString();
     const record: WorkflowTemplateRecord = {
       ...input,
-      id: `tpl_${uuidv4().slice(0, 8)}`,
+      id: `tpl_${randomUUID().slice(0, 8)}`,
       builtin: false,
       createdAt: now,
       updatedAt: now,

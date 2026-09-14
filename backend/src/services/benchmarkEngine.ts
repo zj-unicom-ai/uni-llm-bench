@@ -1,4 +1,4 @@
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'node:crypto';
 import { randomBytes } from 'crypto';
 import {
   BenchmarkConfig,
@@ -621,7 +621,7 @@ export async function startBenchmark(
   config: BenchmarkConfig,
   apiKeys: Record<string, string>,
 ): Promise<BenchmarkRun> {
-  const id = `bench_${uuidv4().slice(0, 8)}`;
+  const id = `bench_${randomUUID().slice(0, 8)}`;
 
   const run: BenchmarkRun = {
     id,

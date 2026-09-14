@@ -1,7 +1,7 @@
 import { ProviderConfig, ProviderConfigInput } from '../types';
 import { encrypt, decrypt, maskApiKey } from '../utils/encryption';
 import { getDb } from './database';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'node:crypto';
 
 /** Throw if two model entries share the same id or name. Exported for tests. */
 export function assertUniqueModels(models: Array<{ id: string; name: string }>): void {
@@ -79,7 +79,7 @@ class ProviderStore {
     const now = new Date().toISOString();
     const normalizedModels = input.models.map((m) => ({
       ...m,
-      id: m.id || uuidv4(),
+      id: m.id || randomUUID(),
       supportsStreaming: m.supportsStreaming ?? true,
       isActive: m.isActive ?? true,
     }));
@@ -87,7 +87,7 @@ class ProviderStore {
     // duplicate-named models cause confusing CRUD behavior downstream.
     assertUniqueModels(normalizedModels);
     const provider: ProviderConfig = {
-      id: uuidv4(),
+      id: randomUUID(),
       name: input.name,
       endpoint: input.endpoint,
       apiKey: encrypt(input.apiKey),
@@ -137,7 +137,7 @@ class ProviderStore {
     const nextModels = input.models
       ? input.models.map((m) => ({
           ...m,
-          id: m.id || uuidv4(),
+          id: m.id || randomUUID(),
           supportsStreaming: m.supportsStreaming ?? true,
           isActive: m.isActive ?? true,
         }))
